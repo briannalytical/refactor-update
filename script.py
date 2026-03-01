@@ -1,17 +1,15 @@
 import sys
 from datetime import date, datetime
 from typing import Optional, Tuple, List, Dict, Any
+import datetime
 import psycopg2
+from datetime import date
 from psycopg2 import sql
 from psycopg2._psycopg import cursor
 from psycopg2.extensions import cursor as PgCursor, connection as PgConnection
 
 
 # CONFIGURATION & CONSTANTS
-
-import datetime
-import psycopg2
-from datetime import date
 
 
 def initialize_database(cursor, conn):
