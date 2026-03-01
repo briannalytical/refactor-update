@@ -9,9 +9,7 @@ from psycopg2._psycopg import cursor
 from psycopg2.extensions import cursor as PgCursor, connection as PgConnection
 
 
-# CONFIGURATION & CONSTANTS
-
-
+# CREATE DATABASE SCHEMA
 def initialize_database(cursor, conn):
     """Initialize database schema if it doesn't exist."""
 
@@ -132,20 +130,6 @@ def initialize_database(cursor, conn):
 
     conn.commit()
     print("✅ Database schema initialized successfully!")
-
-
-# db connection
-conn = psycopg2.connect(
-    dbname="postgres",
-    user="postgres",
-    password="your_password_here",
-    host="localhost",
-    port="5432"
-)
-#cursor = conn.cursor()
-
-initialize_database(cursor, conn)
-
 
 # CONSTANTS
 
