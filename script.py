@@ -8,13 +8,146 @@ from psycopg2.extensions import cursor as PgCursor, connection as PgConnection
 
 # CONFIGURATION & CONSTANTS
 
-DB_CONFIG = {
-    'dbname': 'postgres',
-    'user': 'postgres',
-    'password': 'your_password_here',
-    'host': 'localhost',
-    'port': '5432'
-}
+import datetime
+import psycopg2
+from datetime import date
+
+
+def initialize_database(cursor, conn):
+    """Initialize database schema if it doesn't exist."""
+
+    # Create custom enum types if they don't exist
+    cursor.execute("""
+        DO $$ BEGIN
+            CREATE TYPE application_status_enum AS ENUM (
+                'applied',
+                'interviewing_first_scheduled',
+                'interviewing_first_completed',
+                'interviewing_first_followed_up',
+                'interviewing_second_scheduled',
+                'interviewing_second_completed',
+                'interviewing_second_followed_up',
+                'interviewing_final_scheduled',
+                'interviewing_final_completed',
+                'interviewing_final_followed_up',
+                'offer_received',
+                'rejected'
+            );
+        EXCEPTION
+            WHEN duplicate_object THEN null;
+        END $$;
+    """)
+
+    cursor.execute("""
+        DO $$ BEGIN
+            CREATE TYPE next_action_enum AS ENUM (
+                'check_application_status',
+                'follow_up_with_contact',
+                'send_follow_up_email',
+                'prepare_for_interview',
+                'send_thank_you_email',
+                'prepare_for_second_interview',
+                'send_thank_you_email_second_interview',
+                'prepare_for_final_interview',
+                'send_thank_you_email_final_interview'
+            );
+        EXCEPTION
+            WHEN duplicate_object THEN null;
+        END $$;
+    """)
+
+    # Create the main table if it doesn't exist
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS application_tracking (
+            id SERIAL PRIMARY KEY,
+            job_title VARCHAR(255) NOT NULL,
+            company VARCHAR(255) NOT NULL,
+            application_status application_status_enum DEFAULT 'applied',
+            date_applied DATE DEFAULT CURRENT_DATE,
+            application_software VARCHAR(100),
+            job_notes TEXT,
+            follow_up_contact_name VARCHAR(255),
+            follow_up_contact_details VARCHAR(255),
+            next_action next_action_enum,
+            check_application_status TIMESTAMP,
+            next_follow_up_date TIMESTAMP,
+            interview_date DATE,
+            interview_time TIME,
+            interviewer_name VARCHAR(255),
+            interview_prep_notes TEXT,
+            second_interview_date DATE,
+            final_interview_date DATE,
+            is_priority BOOLEAN DEFAULT FALSE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+    """)
+
+    # Create function to automatically set check_application_status date
+    cursor.execute("""
+        CREATE OR REPLACE FUNCTION set_check_application_status()
+        RETURNS TRIGGER AS $$
+        BEGIN
+            IF NEW.application_status = 'applied' THEN
+                NEW.check_application_status := NEW.date_applied + INTERVAL '2 weeks';
+            END IF;
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql;
+    """)
+
+    # Create trigger if it doesn't exist
+    cursor.execute("""
+        DO $$ BEGIN
+            CREATE TRIGGER trigger_set_check_application_status
+                BEFORE INSERT ON application_tracking
+                FOR EACH ROW
+                EXECUTE FUNCTION set_check_application_status();
+        EXCEPTION
+            WHEN duplicate_object THEN null;
+        END $$;
+    """)
+
+    # Create function to update updated_at timestamp
+    cursor.execute("""
+        CREATE OR REPLACE FUNCTION update_updated_at_column()
+        RETURNS TRIGGER AS $$
+        BEGIN
+            NEW.updated_at = CURRENT_TIMESTAMP;
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql;
+    """)
+
+    # Create trigger for updated_at
+    cursor.execute("""
+        DO $$ BEGIN
+            CREATE TRIGGER trigger_update_updated_at
+                BEFORE UPDATE ON application_tracking
+                FOR EACH ROW
+                EXECUTE FUNCTION update_updated_at_column();
+        EXCEPTION
+            WHEN duplicate_object THEN null;
+        END $$;
+    """)
+
+    conn.commit()
+    print("✅ Database schema initialized successfully!")
+
+
+# db connection
+conn = psycopg2.connect(
+    dbname="postgres",
+    user="postgres",
+    password="your_password_here",
+    host="localhost",
+    port="5432"
+)
+cursor = conn.cursor()
+
+initialize_database(cursor, conn)
+
+# CONSTANTS
 
 AUTO_STATUS_MAP = {
     'check_application_status': 'interviewing_first_scheduled',
@@ -891,11 +1024,11 @@ def main():
     Display.intro()
 
     # Initialize database schema (safe to run multiple times)
-    with DatabaseConnection(DB_CONFIG, initialize=True) as (conn, cursor):
+    with DatabaseConnection(initialize_database) as (conn, cursor):
         pass  # Schema initialization happens in __enter__
 
     # Run main application
-    with DatabaseConnection(DB_CONFIG) as (conn, cursor):
+    with DatabaseConnection(initialize_database) as (conn, cursor):
         db = ApplicationDB(cursor, conn)
         menu = MenuHandler(db)
 
