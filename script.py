@@ -514,7 +514,7 @@ class MenuHandler:
                                       1, 999999)
             if app_id is None:
                 Display.exit_to_menu()
-                break
+                return
 
             # Find and display application
             selected = next((app for app in applications if app[2] == app_id), None)
