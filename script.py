@@ -5,6 +5,58 @@ from typing import Optional, Tuple, List, Dict, Any
 from psycopg2.extensions import cursor as PgCursor, connection as PgConnection
 
 
+# CONSTANTS
+AUTO_STATUS_MAP = {
+    'check_application_status': 'interviewing_first_scheduled',
+    'follow_up_with_contact': 'interviewing_first_scheduled',
+    'send_follow_up_email': 'interviewing_first_followed_up',
+    'prepare_for_interview': 'interviewing_first_completed',
+    'send_thank_you_email': 'interviewing_first_followed_up',
+    'prepare_for_second_interview': 'interviewing_second_completed',
+    'send_thank_you_email_second_interview': 'interviewing_second_followed_up',
+    'prepare_for_final_interview': 'interviewing_final_completed',
+    'send_thank_you_email_final_interview': 'interviewing_final_followed_up'
+}
+
+STATUS_DISPLAY_MAP = {
+    'applied': 'Applied',
+    'interviewing_first_scheduled': 'First Interview Scheduled',
+    'interviewing_first_completed': 'First Interview Completed',
+    'interviewing_first_followed_up': 'First Interview Completed - Follow-up Sent',
+    'interviewing_second_scheduled': 'Second Interview Scheduled',
+    'interviewing_second_completed': 'Second Interview Completed',
+    'interviewing_second_followed_up': 'Second Interview Completed - Follow-up Sent',
+    'interviewing_final_scheduled': 'Final Interview Scheduled',
+    'interviewing_final_completed': 'Final Interview Completed',
+    'interviewing_final_followed_up': 'Final Interview Completed - Follow-up Sent',
+    'offer_received': 'Offer Received',
+    'rejected': 'Rejected'
+}
+
+STATUS_OPTIONS = {
+    "Applied": "applied",
+    "First Interview Scheduled": "interviewing_first_scheduled",
+    "First Interview Completed": "interviewing_first_completed",
+    "Post First Interview Follow-Up Sent": "interviewing_first_followed_up",
+    "Second Interview Scheduled": "interviewing_second_scheduled",
+    "Second Interview Completed": "interviewing_second_completed",
+    "Post Second Interview Follow-Up Sent": "interviewing_second_followed_up",
+    "Final Interview Scheduled": "interviewing_final_scheduled",
+    "Final Interview Completed": "interviewing_final_completed",
+    "Post Final Interview Follow-Up Sent": "interviewing_final_followed_up",
+    "Offer Received": "offer_received",
+    "Rejected": "rejected"
+}
+
+# DATABASE CONFIG
+DB_CONFIG = {
+    'dbname': 'postgres',
+    'user': 'postgres',
+    'password': 'your_password_here',
+    'host': 'localhost',
+    'port': '5432'
+}
+
 # CREATE DATABASE SCHEMA
 def initialize_database(cursor, conn):
     """Initialize database schema if it doesn't exist."""
@@ -127,54 +179,9 @@ def initialize_database(cursor, conn):
     conn.commit()
     print("✅ Database schema initialized successfully!")
 
-# CONSTANTS
-
-AUTO_STATUS_MAP = {
-    'check_application_status': 'interviewing_first_scheduled',
-    'follow_up_with_contact': 'interviewing_first_scheduled',
-    'send_follow_up_email': 'interviewing_first_followed_up',
-    'prepare_for_interview': 'interviewing_first_completed',
-    'send_thank_you_email': 'interviewing_first_followed_up',
-    'prepare_for_second_interview': 'interviewing_second_completed',
-    'send_thank_you_email_second_interview': 'interviewing_second_followed_up',
-    'prepare_for_final_interview': 'interviewing_final_completed',
-    'send_thank_you_email_final_interview': 'interviewing_final_followed_up'
-}
-
-STATUS_DISPLAY_MAP = {
-    'applied': 'Applied',
-    'interviewing_first_scheduled': 'First Interview Scheduled',
-    'interviewing_first_completed': 'First Interview Completed',
-    'interviewing_first_followed_up': 'First Interview Completed - Follow-up Sent',
-    'interviewing_second_scheduled': 'Second Interview Scheduled',
-    'interviewing_second_completed': 'Second Interview Completed',
-    'interviewing_second_followed_up': 'Second Interview Completed - Follow-up Sent',
-    'interviewing_final_scheduled': 'Final Interview Scheduled',
-    'interviewing_final_completed': 'Final Interview Completed',
-    'interviewing_final_followed_up': 'Final Interview Completed - Follow-up Sent',
-    'offer_received': 'Offer Received',
-    'rejected': 'Rejected'
-}
-
-STATUS_OPTIONS = {
-    "Applied": "applied",
-    "First Interview Scheduled": "interviewing_first_scheduled",
-    "First Interview Completed": "interviewing_first_completed",
-    "Post First Interview Follow-Up Sent": "interviewing_first_followed_up",
-    "Second Interview Scheduled": "interviewing_second_scheduled",
-    "Second Interview Completed": "interviewing_second_completed",
-    "Post Second Interview Follow-Up Sent": "interviewing_second_followed_up",
-    "Final Interview Scheduled": "interviewing_final_scheduled",
-    "Final Interview Completed": "interviewing_final_completed",
-    "Post Final Interview Follow-Up Sent": "interviewing_final_followed_up",
-    "Offer Received": "offer_received",
-    "Rejected": "rejected"
-}
-
 
 
 # DATABASE CONNECTION
-
 class DatabaseConnection:
     """Context manager for database connections."""
 
@@ -205,7 +212,6 @@ class DatabaseConnection:
 
 
 # DISPLAY UTILITIES
-
 class Display:
     """Handles all user-facing display messages."""
 
