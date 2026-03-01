@@ -3,6 +3,7 @@ from datetime import date, datetime
 from typing import Optional, Tuple, List, Dict, Any
 import psycopg2
 from psycopg2 import sql
+from psycopg2._psycopg import cursor
 from psycopg2.extensions import cursor as PgCursor, connection as PgConnection
 
 
@@ -143,9 +144,10 @@ conn = psycopg2.connect(
     host="localhost",
     port="5432"
 )
-cursor = conn.cursor()
+#cursor = conn.cursor()
 
 initialize_database(cursor, conn)
+
 
 # CONSTANTS
 
