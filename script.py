@@ -5,7 +5,142 @@ from typing import Optional, Tuple, List, Dict, Any
 from psycopg2.extensions import cursor as PgCursor, connection as PgConnection
 
 
-# CONSTANTS
+
+### DATABASE SCHEMA INITIALIZATION ###
+### ============================== ###
+def initialize_database(cursor, conn):
+    """Initialize database schema if it not exists."""
+
+    # Create custom enum types if not exists
+    cursor.execute("""
+        DO $$ BEGIN
+            CREATE TYPE application_status_enum AS ENUM (
+                'applied',
+                'interviewing_first_scheduled',
+                'interviewing_first_completed',
+                'interviewing_first_followed_up',
+                'interviewing_second_scheduled',
+                'interviewing_second_completed',
+                'interviewing_second_followed_up',
+                'interviewing_final_scheduled',
+                'interviewing_final_completed',
+                'interviewing_final_followed_up',
+                'offer_received',
+                'rejected'
+            );
+        EXCEPTION
+            WHEN duplicate_object THEN null;
+        END $$;
+    """)
+
+    cursor.execute("""
+        DO $$ BEGIN
+            CREATE TYPE next_action_enum AS ENUM (
+                'check_application_status',
+                'follow_up_with_contact',
+                'send_follow_up_email',
+                'prepare_for_interview',
+                'send_thank_you_email',
+                'prepare_for_second_interview',
+                'send_thank_you_email_second_interview',
+                'prepare_for_final_interview',
+                'send_thank_you_email_final_interview'
+            );
+        EXCEPTION
+            WHEN duplicate_object THEN null;
+        END $$;
+    """)
+
+    # Create table if not exists
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS application_tracking (
+            id SERIAL PRIMARY KEY,
+            job_title VARCHAR(255) NOT NULL,
+            company VARCHAR(255) NOT NULL,
+            application_status application_status_enum DEFAULT 'applied',
+            date_applied DATE DEFAULT CURRENT_DATE,
+            application_software VARCHAR(100),
+            job_notes TEXT,
+            follow_up_contact_name VARCHAR(255),
+            follow_up_contact_details VARCHAR(255),
+            next_action next_action_enum,
+            check_application_status TIMESTAMP,
+            next_follow_up_date TIMESTAMP,
+            interview_date DATE,
+            interview_time TIME,
+            interviewer_name VARCHAR(255),
+            interview_prep_notes TEXT,
+            second_interview_date DATE,
+            final_interview_date DATE,
+            is_priority BOOLEAN DEFAULT FALSE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+    """)
+
+    # Function to automatically set check_application_status date
+    cursor.execute("""
+        CREATE OR REPLACE FUNCTION set_check_application_status()
+        RETURNS TRIGGER AS $$
+        BEGIN
+            IF NEW.application_status = 'applied' THEN
+                NEW.check_application_status := NEW.date_applied + INTERVAL '2 weeks';
+            END IF;
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql;
+    """)
+
+    # Create trigger if it not exists
+    cursor.execute("""
+        DO $$ BEGIN
+            CREATE TRIGGER trigger_set_check_application_status
+                BEFORE INSERT ON application_tracking
+                FOR EACH ROW
+                EXECUTE FUNCTION set_check_application_status();
+        EXCEPTION
+            WHEN duplicate_object THEN null;
+        END $$;
+    """)
+
+    # Function to update updated_at timestamp
+    cursor.execute("""
+        CREATE OR REPLACE FUNCTION update_updated_at_column()
+        RETURNS TRIGGER AS $$
+        BEGIN
+            NEW.updated_at = CURRENT_TIMESTAMP;
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql;
+    """)
+
+    # Create trigger for updated_at
+    cursor.execute("""
+        DO $$ BEGIN
+            CREATE TRIGGER trigger_update_updated_at
+                BEFORE UPDATE ON application_tracking
+                FOR EACH ROW
+                EXECUTE FUNCTION update_updated_at_column();
+        EXCEPTION
+            WHEN duplicate_object THEN null;
+        END $$;
+    """)
+
+    conn.commit()
+    print("Database schema initialized successfully!")
+
+
+
+# CONFIGURATION & CONSTANTS #
+# ========================= #
+DB_CONFIG = {
+    'dbname': 'postgres',
+    'user': 'postgres',
+    'password': 'your_password_here',
+    'host': 'localhost',
+    'port': '5432'
+}
+
 AUTO_STATUS_MAP = {
     'check_application_status': 'interviewing_first_scheduled',
     'follow_up_with_contact': 'interviewing_first_scheduled',
@@ -48,145 +183,15 @@ STATUS_OPTIONS = {
     "Rejected": "rejected"
 }
 
-# DATABASE CONFIG
-DB_CONFIG = {
-    'dbname': 'postgres',
-    'user': 'postgres',
-    'password': 'your_password_here',
-    'host': 'localhost',
-    'port': '5432'
-}
 
-# CREATE DATABASE SCHEMA
-def initialize_database(cursor, conn):
-    """Initialize database schema if it doesn't exist."""
-
-    # Create custom enum types if they don't exist
-    cursor.execute("""
-        DO $$ BEGIN
-            CREATE TYPE application_status_enum AS ENUM (
-                'applied',
-                'interviewing_first_scheduled',
-                'interviewing_first_completed',
-                'interviewing_first_followed_up',
-                'interviewing_second_scheduled',
-                'interviewing_second_completed',
-                'interviewing_second_followed_up',
-                'interviewing_final_scheduled',
-                'interviewing_final_completed',
-                'interviewing_final_followed_up',
-                'offer_received',
-                'rejected'
-            );
-        EXCEPTION
-            WHEN duplicate_object THEN null;
-        END $$;
-    """)
-
-    cursor.execute("""
-        DO $$ BEGIN
-            CREATE TYPE next_action_enum AS ENUM (
-                'check_application_status',
-                'follow_up_with_contact',
-                'send_follow_up_email',
-                'prepare_for_interview',
-                'send_thank_you_email',
-                'prepare_for_second_interview',
-                'send_thank_you_email_second_interview',
-                'prepare_for_final_interview',
-                'send_thank_you_email_final_interview'
-            );
-        EXCEPTION
-            WHEN duplicate_object THEN null;
-        END $$;
-    """)
-
-    # Create the main table if it doesn't exist
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS application_tracking (
-            id SERIAL PRIMARY KEY,
-            job_title VARCHAR(255) NOT NULL,
-            company VARCHAR(255) NOT NULL,
-            application_status application_status_enum DEFAULT 'applied',
-            date_applied DATE DEFAULT CURRENT_DATE,
-            application_software VARCHAR(100),
-            job_notes TEXT,
-            follow_up_contact_name VARCHAR(255),
-            follow_up_contact_details VARCHAR(255),
-            next_action next_action_enum,
-            check_application_status TIMESTAMP,
-            next_follow_up_date TIMESTAMP,
-            interview_date DATE,
-            interview_time TIME,
-            interviewer_name VARCHAR(255),
-            interview_prep_notes TEXT,
-            second_interview_date DATE,
-            final_interview_date DATE,
-            is_priority BOOLEAN DEFAULT FALSE,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-    """)
-
-    # Create function to automatically set check_application_status date
-    cursor.execute("""
-        CREATE OR REPLACE FUNCTION set_check_application_status()
-        RETURNS TRIGGER AS $$
-        BEGIN
-            IF NEW.application_status = 'applied' THEN
-                NEW.check_application_status := NEW.date_applied + INTERVAL '2 weeks';
-            END IF;
-            RETURN NEW;
-        END;
-        $$ LANGUAGE plpgsql;
-    """)
-
-    # Create trigger if it doesn't exist
-    cursor.execute("""
-        DO $$ BEGIN
-            CREATE TRIGGER trigger_set_check_application_status
-                BEFORE INSERT ON application_tracking
-                FOR EACH ROW
-                EXECUTE FUNCTION set_check_application_status();
-        EXCEPTION
-            WHEN duplicate_object THEN null;
-        END $$;
-    """)
-
-    # Create function to update updated_at timestamp
-    cursor.execute("""
-        CREATE OR REPLACE FUNCTION update_updated_at_column()
-        RETURNS TRIGGER AS $$
-        BEGIN
-            NEW.updated_at = CURRENT_TIMESTAMP;
-            RETURN NEW;
-        END;
-        $$ LANGUAGE plpgsql;
-    """)
-
-    # Create trigger for updated_at
-    cursor.execute("""
-        DO $$ BEGIN
-            CREATE TRIGGER trigger_update_updated_at
-                BEFORE UPDATE ON application_tracking
-                FOR EACH ROW
-                EXECUTE FUNCTION update_updated_at_column();
-        EXCEPTION
-            WHEN duplicate_object THEN null;
-        END $$;
-    """)
-
-    conn.commit()
-    print("✅ Database schema initialized successfully!")
-
-
-
-# DATABASE CONNECTION
+# DATABASE CONNECTION #
+# =================== #
 class DatabaseConnection:
     """Context manager for database connections."""
 
-    def __init__(self, config: Dict[str, str]):
+    def __init__(self, config: Dict[str, str], initialize: bool = False):
         self.config = config
+        self.initialize = initialize
         self.conn: Optional[PgConnection] = None
         self.cursor: Optional[PgCursor] = None
 
@@ -194,6 +199,10 @@ class DatabaseConnection:
         try:
             self.conn = psycopg2.connect(**self.config)
             self.cursor = self.conn.cursor()
+
+            if self.initialize:
+                initialize_database(self.cursor, self.conn)
+
             return self.conn, self.cursor
         except psycopg2.Error as e:
             print(f"\n❌ Database connection failed: {e}")
@@ -211,13 +220,14 @@ class DatabaseConnection:
 
 
 
-# DISPLAY UTILITIES
+# DISPLAY UTILITIES #
+# ================= #
 class Display:
     """Handles all user-facing display messages."""
 
     @staticmethod
     def intro():
-        print("\n📋 Hello! Welcome to Refactor, your job application tracker! I hope you will find this tool useful! 🥰")
+        print("\n Hello! Welcome to Refactor, your job application tracker! I hope you will find this tool useful! 🥰")
         print("It's tough out there, but tracking your applications doesn't have to be!")
         print(
             "You can use this tool to track applications, remind you when to follow up, and schedule your interviews!")
@@ -239,7 +249,7 @@ class Display:
 
     @staticmethod
     def invalid_letter():
-        print("\n😭 This letter does not exist in this context. Try choosing from the available options.")
+        print("\n😭 This character does not exist in this context. Try choosing from the available options.")
 
     @staticmethod
     def invalid_yes_no():
@@ -270,9 +280,8 @@ class Display:
         return str(val)
 
 
-
-# INPUT UTILITIES
-
+# INPUT UTILITIES #
+# =============== #
 class Input:
     """Handles user input with validation."""
 
@@ -321,8 +330,8 @@ class Input:
 
 
 
-# DATABASE OPERATIONS
-
+# DATABASE OPERATIONS #
+# =================== #
 class ApplicationDB:
     """Handles all database operations for applications."""
 
@@ -485,8 +494,8 @@ class ApplicationDB:
 
 
 
-# BUSINESS LOGIC
-
+# BUSINESS LOGIC #
+# ============== #
 class ContactManager:
     """Handles contact information prompts and updates."""
 
@@ -594,7 +603,22 @@ class TaskProcessor:
 
 
 
-# MENU HANDLERS
+# MENU HANDLERS #
+# ============= #
+def _display_backlog_task(task: Tuple, today: date):
+    """Display a single backlog task."""
+    (app_id, job_title, company, next_action, check_date, _, _, current_status,
+     follow_up_date, interview_date, _, second_interview_date,
+     final_interview_date, is_priority) = task
+
+    priority_indicator = " ‼️" if is_priority else ""
+    print(f"📌 {job_title} @ {company} ({app_id}){priority_indicator}")
+    if next_action:
+        print(f"   → Task: {next_action.replace('_', ' ').title()}")
+
+    TaskProcessor._display_overdue_dates(check_date, follow_up_date, interview_date,
+                                         second_interview_date, final_interview_date, today)
+
 
 class MenuHandler:
     """Handles all menu operations."""
@@ -685,7 +709,7 @@ class MenuHandler:
         print("-" * 60)
 
         for task in backlog_tasks:
-            self._display_backlog_task(task, today)
+            _display_backlog_task(task, today)
 
         print("=" * 60)
 
@@ -703,20 +727,6 @@ class MenuHandler:
                     break
             else:
                 Display.invalid_number()
-
-    def _display_backlog_task(self, task: Tuple, today: date):
-        """Display a single backlog task."""
-        (app_id, job_title, company, next_action, check_date, _, _, current_status,
-         follow_up_date, interview_date, _, second_interview_date,
-         final_interview_date, is_priority) = task
-
-        priority_indicator = " ‼️" if is_priority else ""
-        print(f"📌 {job_title} @ {company} ({app_id}){priority_indicator}")
-        if next_action:
-            print(f"   → Task: {next_action.replace('_', ' ').title()}")
-
-        TaskProcessor._display_overdue_dates(check_date, follow_up_date, interview_date,
-                                             second_interview_date, final_interview_date, today)
 
     def _process_daily_tasks(self, today: date):
         """Process today's tasks."""
@@ -1003,8 +1013,8 @@ class MenuHandler:
 
 
 
-# MAIN APPLICATION
-
+# MAIN APPLICATION #
+# ================ #
 def main():
     """Main application loop."""
     Display.intro()
