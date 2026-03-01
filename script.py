@@ -1020,11 +1020,11 @@ def main():
     Display.intro()
 
     # Initialize database schema (safe to run multiple times)
-    with DatabaseConnection(initialize_database) as (conn, cursor):
+    with DatabaseConnection(DB_CONFIG, initialize=True) as (conn, cursor):
         pass  # Schema initialization happens in __enter__
 
     # Run main application
-    with DatabaseConnection(initialize_database) as (conn, cursor):
+    with DatabaseConnection(DB_CONFIG) as (conn, cursor):
         db = ApplicationDB(cursor, conn)
         menu = MenuHandler(db)
 
@@ -1047,3 +1047,14 @@ def main():
                 break
             else:
                 print("\n❌ Invalid selection. 🥲 Please try again from the main menu.")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\n\n👋 Session interrupted. Goodbye!")
+        sys.exit(0)
+    except Exception as e:
+        print(f"\n❌ An unexpected error occurred: {e}")
+        sys.exit(1)
