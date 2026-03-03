@@ -458,6 +458,15 @@ class ApplicationDB:
         )
         self.conn.commit()
 
+    def add_recruiter_contact(self, recruiter_name, recruiting_company, contact_details, initial_call_date,
+                              initial_call_time, notes, is_priority):
+        """Enter a new recruiter contact."""
+        self.cursor.execute(
+            "UPDATE application_tracking SET recruiter_name = %s, recruiting_company = %s, contact_details = %s, initial_call_date = %s, initial_call_time = %s, notes = %s, is_priority = %s",
+            (recruiter_name, recruiting_company, contact_details, initial_call_date, initial_call_time, notes, is_priority)
+        )
+        self.conn.commit()
+
     def delete_application(self, app_id: int):
         """Delete an application."""
         self.cursor.execute("DELETE FROM application_tracking WHERE id = %s", (app_id,))
