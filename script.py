@@ -810,7 +810,23 @@ class MenuHandler:
         return True
 
     def handle_enter(self):
-        """Handle ENTER menu option - add new application."""
+        """Handle ENTER menu option - add new application or recruiter contact."""
+        print("\nWhat would you like to track?")
+        print("1. Job Application (I applied)")
+        print("2. Recruiter Outreach (they contacted me)")
+
+        choice = Input.get_number("\nSelect option (1-2, or X to exit): ", 1, 2)
+        if choice is None:
+            Display.exit_to_menu()
+            return
+
+        if choice == 1:
+            self._handle_job_application()
+        elif choice == 2:
+            self._handle_recruiter_outreach()
+
+    def _handle_job_application(self):
+        """Handle adding a job application (existing flow)."""
         print("\nEnter your new application details:")
 
         job_title = Input.get_string("Job title: ", allow_empty=False)
@@ -836,37 +852,40 @@ class MenuHandler:
                                 contact_name, contact_details, is_priority)
         print("\n✅ Application added! I'll remind you when you have tasks related to this job. 😊")
 
-    def handle_update(self):
-        """Handle UPDATE menu option."""
-        self.db.cursor.execute(
-            """SELECT id, job_title, company FROM application_tracking 
-               WHERE application_status != 'rejected' ORDER BY company"""
-        )
-        apps = self.db.cursor.fetchall()
+    def _handle_recruiter_outreach(self):
+        """Handle adding a recruiter contact."""
+        print("\nEnter recruiter contact details:")
 
-        if not apps:
-            print("\n😶 No applications found to update.")
-            return
-
-        print("\n--- Existing Applications ---")
-        for app in apps:
-            print(f"{app[0]}: {app[2]} - {app[1]}")
-
-        app_id = Input.get_number("\nEnter the number of the application to update (or X to exit): ",
-                                  1, 999999)
-        if app_id is None:
+        recruiter_name = Input.get_string("Recruiter name: ", allow_empty=False)
+        if recruiter_name is None:
             Display.exit_to_menu()
             return
 
-        if not any(app[0] == app_id for app in apps):
-            Display.invalid_number()
+        recruiting_company = Input.get_string("Recruiting company (or hiring company if internal): ", allow_empty=False)
+        if recruiting_company is None:
+            Display.exit_to_menu()
             return
 
-        selected = next((app for app in apps if app[0] == app_id), None)
-        if selected:
-            print(f"\nSelected: {selected[0]}: {selected[2]} - {selected[1]}")
+        contact_details = Input.get_string("Contact details (email/phone/LinkedIn): ")
 
-        self._handle_update_menu(app_id)
+        initial_call_date = Input.get_string("Date of initial contact (YYYY-MM-DD) or press enter for today: ")
+        if initial_call_date == "":
+            initial_call_date = date.today().strftime('%Y-%m-%d')
+
+        initial_call_time = Input.get_string("Time of call (HH:MM, optional): ")
+
+        notes = Input.get_string("Any notes about the conversation? (optional): ")
+
+        is_priority = Input.get_yes_no("Mark as priority? (Y/N): ") == 'Y'
+
+        # Add recruiter entry
+        self.db.add_recruiter_contact(
+            recruiter_name, recruiting_company, contact_details,
+            initial_call_date, initial_call_time, notes, is_priority
+        )
+
+        print("\n✅ Recruiter contact added!")
+        print("💡 Tip: You can link a specific role to this recruiter later via the UPDATE menu.")
 
     def _handle_update_menu(self, app_id: int):
         """Handle the update submenu."""
