@@ -630,9 +630,11 @@ def _display_backlog_task(task: Tuple, today: date):
 class MenuHandler:
     """Handles all menu operations."""
 
+
     def __init__(self, db: ApplicationDB):
         self.db = db
         self.task_processor = TaskProcessor(db)
+
 
     def handle_view(self):
         """Handle VIEW menu option."""
@@ -673,6 +675,7 @@ class MenuHandler:
             else:
                 Display.invalid_number()
 
+
     def _display_application_details(self, app_id: int):
         """Display detailed information for a single application."""
         app = self.db.get_application_by_id(app_id)
@@ -687,6 +690,7 @@ class MenuHandler:
         # For now, displaying key fields
         print("Application details displayed")
         print("-" * 60)
+
 
     def handle_tasks(self):
         """Handle TASKS menu option."""
@@ -709,6 +713,7 @@ class MenuHandler:
 
         # Process today's tasks
         self._process_daily_tasks(today)
+
 
     def _process_backlog(self, backlog_tasks: List[Tuple], today: date):
         """Process backlog tasks."""
@@ -735,6 +740,7 @@ class MenuHandler:
             else:
                 Display.invalid_number()
 
+
     def _process_daily_tasks(self, today: date):
         """Process today's tasks."""
         daily_tasks = self.db.get_daily_tasks(today)
@@ -759,6 +765,7 @@ class MenuHandler:
             for job_title, company, task_name in incomplete_tasks:
                 print(f"📌 {job_title} @ {company} - {task_name}")
             print("-" * 60)
+
 
     def _process_daily_task(self, task: Tuple, today: date, incomplete_tasks: List) -> bool:
         """Process a single daily task. Returns False if user exits."""
@@ -816,6 +823,7 @@ class MenuHandler:
 
         return True
 
+
     def handle_enter(self):
         """Handle ENTER menu option - add new application or recruiter contact."""
         print("\nWhat would you like to track?")
@@ -831,6 +839,7 @@ class MenuHandler:
             self._handle_job_application()
         elif choice == 2:
             self._handle_recruiter_outreach()
+
 
     def _handle_job_application(self):
         """Handle adding a job application (existing flow)."""
@@ -858,6 +867,7 @@ class MenuHandler:
         self.db.add_application(job_title, company, software, notes,
                                 contact_name, contact_details, is_priority)
         print("\n✅ Application added! I'll remind you when you have tasks related to this job. 😊")
+
 
     def _handle_recruiter_outreach(self):
         """Handle adding a recruiter contact."""
@@ -893,6 +903,7 @@ class MenuHandler:
 
         print("\n✅ Recruiter contact added!")
         print("💡 Tip: You can link a specific role to this recruiter later via the UPDATE menu.")
+
 
     def _handle_update_menu(self, app_id: int):
         """Handle the update submenu."""
