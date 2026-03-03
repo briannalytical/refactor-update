@@ -9,9 +9,9 @@ from psycopg2.extensions import cursor as PgCursor, connection as PgConnection
 ### DATABASE SCHEMA INITIALIZATION ###
 ### ============================== ###
 def initialize_database(cursor, conn):
-    """Initialize database schema if it not exists."""
+    """Initialize database schema if it doesn't exist."""
 
-    # Create custom enum types if not exists
+    # Create custom enum types if they don't exist
     cursor.execute("""
         DO $$ BEGIN
             CREATE TYPE application_status_enum AS ENUM (
@@ -51,12 +51,12 @@ def initialize_database(cursor, conn):
         END $$;
     """)
 
-    # Create table if not exists
+    # Create the main table if it doesn't exist
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS application_tracking (
             id SERIAL PRIMARY KEY,
-            job_title VARCHAR(255) NOT NULL,
-            company VARCHAR(255) NOT NULL,
+            job_title VARCHAR(255),
+            company VARCHAR(255),
             application_status application_status_enum DEFAULT 'applied',
             date_applied DATE DEFAULT CURRENT_DATE,
             application_software VARCHAR(100),
@@ -73,12 +73,19 @@ def initialize_database(cursor, conn):
             second_interview_date DATE,
             final_interview_date DATE,
             is_priority BOOLEAN DEFAULT FALSE,
+            source_type VARCHAR(20) DEFAULT 'application',
+            recruiter_name VARCHAR(255),
+            recruiting_company VARCHAR(255),
+            initial_call_date DATE,
+            initial_call_time TIME,
+            resume_sent BOOLEAN DEFAULT FALSE,
+            resume_sent_date DATE,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
     """)
 
-    # Function to automatically set check_application_status date
+    # Create function to automatically set check_application_status date
     cursor.execute("""
         CREATE OR REPLACE FUNCTION set_check_application_status()
         RETURNS TRIGGER AS $$
@@ -91,7 +98,7 @@ def initialize_database(cursor, conn):
         $$ LANGUAGE plpgsql;
     """)
 
-    # Create trigger if it not exists
+    # Create trigger if it doesn't exist
     cursor.execute("""
         DO $$ BEGIN
             CREATE TRIGGER trigger_set_check_application_status
@@ -103,7 +110,7 @@ def initialize_database(cursor, conn):
         END $$;
     """)
 
-    # Function to update updated_at timestamp
+    # Create function to update updated_at timestamp
     cursor.execute("""
         CREATE OR REPLACE FUNCTION update_updated_at_column()
         RETURNS TRIGGER AS $$
@@ -127,7 +134,7 @@ def initialize_database(cursor, conn):
     """)
 
     conn.commit()
-    print("Database schema initialized successfully!")
+    print("✅ Database schema initialized successfully!")
 
 
 
