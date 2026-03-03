@@ -458,12 +458,19 @@ class ApplicationDB:
         )
         self.conn.commit()
 
-    def add_recruiter_contact(self, recruiter_name, recruiting_company, contact_details, initial_call_date,
-                              initial_call_time, notes, is_priority):
-        """Enter a new recruiter contact."""
+    def add_recruiter_contact(self, recruiter_name: str, recruiting_company: str,
+                              contact_details: Optional[str], initial_call_date: str,
+                              initial_call_time: Optional[str], notes: Optional[str],
+                              is_priority: bool):
+        """Add a new recruiter contact entry."""
         self.cursor.execute(
-            "UPDATE application_tracking SET recruiter_name = %s, recruiting_company = %s, contact_details = %s, initial_call_date = %s, initial_call_time = %s, notes = %s, is_priority = %s",
-            (recruiter_name, recruiting_company, contact_details, initial_call_date, initial_call_time, notes, is_priority)
+            """INSERT INTO application_tracking 
+               (source_type, recruiter_name, recruiting_company, follow_up_contact_details,
+                initial_call_date, initial_call_time, job_notes, is_priority,
+                application_status)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+            ('recruiter', recruiter_name, recruiting_company, contact_details,
+             initial_call_date, initial_call_time, notes, is_priority, 'applied')
         )
         self.conn.commit()
 
