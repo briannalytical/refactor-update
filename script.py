@@ -840,6 +840,52 @@ class MenuHandler:
 
         return True
 
+    def handle_contacts(self):
+        """Display all contacts (recruiters and application POCs)."""
+        # Get all contacts from applications and recruiters
+        self.db.cursor.execute("""
+            SELECT 
+                id,
+                source_type,
+                COALESCE(recruiter_name, follow_up_contact_name) as contact_name,
+                COALESCE(recruiting_company, company) as company_name,
+                follow_up_contact_details,
+                job_title,
+                is_priority
+            FROM application_tracking
+            WHERE (recruiter_name IS NOT NULL AND recruiter_name != '')
+               OR (follow_up_contact_name IS NOT NULL AND follow_up_contact_name != '')
+            ORDER BY is_priority DESC, contact_name ASC
+        """)
+
+        contacts = self.db.cursor.fetchall()
+
+        if not contacts:
+            print("\n📇 No contacts found.")
+            print("💡 Tip: Add contact info when tracking applications or recruiter outreach!")
+            return
+
+        print("\n📇 Contact Book")
+        print("=" * 80)
+
+        for contact in contacts:
+            app_id, source_type, contact_name, company_name, contact_details, job_title, is_priority = contact
+
+            priority_indicator = "‼️ " if is_priority else ""
+            contact_type = "👔 Recruiter" if source_type == 'recruiter' else "🏢 Application Contact"
+
+            print(f"{priority_indicator}{contact_name} - {contact_type}")
+            if company_name:
+                print(f"   Company: {company_name}")
+            if job_title:
+                print(f"   Role: {job_title}")
+            if contact_details:
+                print(f"   Contact: {contact_details}")
+            print(f"   (Application ID: {app_id})")
+            print("-" * 80)
+
+        print(f"\nTotal contacts: {len(contacts)}")
+
 
     def handle_enter(self):
         """Handle ENTER menu option - add new application or recruiter contact."""
@@ -1092,6 +1138,8 @@ def main():
                 menu.handle_tasks()
             elif selection == "ENTER":
                 menu.handle_enter()
+            elif selection == "CONTACTS":
+                menu.handle_contacts()
             elif selection == "UPDATE":
                 menu.handle_update()
             elif selection == "TIPS":
