@@ -968,6 +968,56 @@ class MenuHandler:
         print("💡 Tip: You can link a specific role to this recruiter later via the UPDATE menu.")
 
 
+    def handle_update(self):
+        """Handle UPDATE menu option."""
+        self.db.cursor.execute(
+            """SELECT id, job_title, company, recruiter_name, recruiting_company, source_type
+               FROM application_tracking 
+               WHERE application_status != 'rejected' 
+               ORDER BY company"""
+        )
+        apps = self.db.cursor.fetchall()
+
+        if not apps:
+            print("\n😶 No applications found to update.")
+            return
+
+        print("\n--- Existing Applications ---")
+        for app in apps:
+            app_id, job_title, company, recruiter_name, recruiting_company, source_type = app
+
+            # Handle recruiter entries vs regular applications
+            if source_type == 'recruiter':
+                display_name = f"{recruiter_name} @ {recruiting_company} (Recruiter)"
+                if job_title:
+                    display_name += f" - {job_title}"
+            else:
+                display_name = f"{company} - {job_title}" if company and job_title else "Incomplete entry"
+
+            print(f"{app_id}: {display_name}")
+
+        app_id = Input.get_number("\nEnter the number of the application to update (or X to exit): ",
+                                  1, 999999)
+        if app_id is None:
+            Display.exit_to_menu()
+            return
+
+        if not any(app[0] == app_id for app in apps):
+            Display.invalid_number()
+            return
+
+        selected = next((app for app in apps if app[0] == app_id), None)
+        if selected:
+            _, job_title, company, recruiter_name, recruiting_company, source_type = selected
+            if source_type == 'recruiter':
+                display = f"{recruiter_name} @ {recruiting_company}"
+            else:
+                display = f"{company} - {job_title}"
+            print(f"\nSelected: {app_id}: {display}")
+
+        self._handle_update_menu(app_id)
+
+
     def _handle_update_menu(self, app_id: int):
         """Handle the update submenu."""
         print("\nWhat do you want to update?")
