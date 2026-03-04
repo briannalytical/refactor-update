@@ -733,6 +733,14 @@ class MenuHandler:
 
         print("-" * 60)
 
+        # Prompt to update
+        response = Input.get_yes_no_exit("\nWould you like to update this application? (Y/N/X): ")
+        if response == 'X':
+            Display.exit_to_menu()
+            return
+        elif response == 'Y':
+            self._handle_update_menu(app_id)
+
 
     def handle_tasks(self):
         """Handle TASKS menu option."""
