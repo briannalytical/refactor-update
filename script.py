@@ -692,20 +692,45 @@ class MenuHandler:
             else:
                 Display.invalid_number()
 
-
     def _display_application_details(self, app_id: int):
         """Display detailed information for a single application."""
-        app = self.db.get_application_by_id(app_id)
+        # Get full application details with column names
+        self.db.cursor.execute(
+            "SELECT * FROM application_tracking WHERE id = %s",
+            (app_id,)
+        )
+        app = self.db.cursor.fetchone()
+
         if not app:
             print("\n❌ Application not found.")
             return
 
+        # Get column names
+        column_names = [desc[0] for desc in self.db.cursor.description]
+
         print(f"\n📄 Application Details: {app_id}")
         print("=" * 60)
 
-        # This would need column names from cursor.description
-        # For now, displaying key fields
-        print("Application details displayed")
+        # Display all non-null, non-id fields
+        for col_name, value in zip(column_names, app):
+            if col_name == 'id' or value in (None, ''):
+                continue
+
+            # Format the value
+            formatted_value = Display.format_datetime(value)
+
+            # Special formatting for certain fields
+            if col_name == 'application_status':
+                formatted_value = Display.format_status(value)
+            elif col_name == 'is_priority':
+                formatted_value = Display.format_priority(value)
+                if not formatted_value:
+                    continue
+
+            # Format column name for display
+            display_name = col_name.replace('_', ' ').title()
+            print(f"{display_name}: {formatted_value}")
+
         print("-" * 60)
 
 
