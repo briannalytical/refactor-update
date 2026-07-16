@@ -252,6 +252,7 @@ class Display:
             "You can use this tool to track applications, remind you when to follow up, and schedule your interviews!")
         print("You can press X + enter at any point to return to the main menu!")
 
+
     @staticmethod
     def main_menu():
         print("\nWhat would you like to do? Enter your choice below:")
@@ -263,33 +264,41 @@ class Display:
         print("TIPS: Some helpful tips to keep in mind as you apply")
         print("BYE: End your session")
 
+
     @staticmethod
     def invalid_number():
         print("\n😭 Invalid number selection. Please select from available options.")
+
 
     @staticmethod
     def invalid_letter():
         print("\n😭 This character does not exist in this context. Try choosing from the available options.")
 
+
     @staticmethod
     def invalid_yes_no():
         print("\n😭 Please select Y or N.")
+
 
     @staticmethod
     def exit_to_menu():
         print("\n🔙 Returning to main menu.")
 
+
     @staticmethod
     def deletion_cancelled():
         print("\n❌ Deletion has been cancelled.")
+
 
     @staticmethod
     def format_status(status: str) -> str:
         return STATUS_DISPLAY_MAP.get(status, status.replace('_', ' ').title())
 
+
     @staticmethod
     def format_priority(is_priority: bool) -> str:
         return "‼️ Priority" if is_priority else ""
+
 
     @staticmethod
     def format_datetime(val: Any) -> str:
@@ -314,6 +323,7 @@ class Input:
                 return response
             Display.invalid_yes_no()
 
+
     @staticmethod
     def get_yes_no(prompt: str) -> str:
         """Get Y/N input with validation."""
@@ -322,6 +332,7 @@ class Input:
             if response in ['Y', 'N']:
                 return response
             Display.invalid_yes_no()
+
 
     @staticmethod
     def get_number(prompt: str, min_val: int, max_val: int, allow_exit: bool = True) -> Optional[int]:
@@ -337,6 +348,7 @@ class Input:
                 Display.invalid_number()
             except ValueError:
                 Display.invalid_number()
+
 
     @staticmethod
     def get_string(prompt: str, allow_empty: bool = True) -> Optional[str]:
@@ -359,6 +371,7 @@ class ApplicationDB:
         self.cursor = cursor
         self.conn = conn
 
+
     def update_status(self, app_id: int, next_action: Optional[str]) -> Optional[str]:
         """Auto-update application status based on next action."""
         if next_action and next_action in AUTO_STATUS_MAP:
@@ -370,6 +383,7 @@ class ApplicationDB:
             self.conn.commit()
             return new_status
         return None
+
 
     def clear_completed_task_dates(self, app_id: int, today: date):
         """Clear date fields that triggered a completed task, leaving future dates intact."""
@@ -395,6 +409,7 @@ class ApplicationDB:
         )
         self.conn.commit()
 
+
     def manual_status_update(self, app_id: int) -> Optional[str]:
         """Prompt user to manually update application status."""
         print("\n📌 Select new status:")
@@ -414,6 +429,7 @@ class ApplicationDB:
         self.conn.commit()
         return new_status
 
+
     def update_contact_info(self, app_id: int, contact_name: str, contact_details: str):
         """Update contact information for an application."""
         self.cursor.execute(
@@ -423,6 +439,7 @@ class ApplicationDB:
             (contact_name or None, contact_details or None, app_id)
         )
         self.conn.commit()
+
 
     def get_all_applications(self, active_only: bool = False) -> List[Tuple]:
         """Retrieve all applications."""
@@ -437,6 +454,7 @@ class ApplicationDB:
 
         self.cursor.execute(query)
         return self.cursor.fetchall()
+
 
     def get_application_by_id(self, app_id: int) -> Optional[Tuple]:
         """Get a specific application by ID."""
@@ -464,6 +482,7 @@ class ApplicationDB:
         self.cursor.execute(query, (today, today, today, today, today))
         return self.cursor.fetchall()
 
+
     def get_daily_tasks(self, today: date) -> List[Tuple]:
         """Get tasks due today."""
         query = """
@@ -482,6 +501,7 @@ class ApplicationDB:
         self.cursor.execute(query, (today, today, today, today, today))
         return self.cursor.fetchall()
 
+
     def add_application(self, job_title: str, company: str, software: Optional[str],
                         notes: Optional[str], contact_name: Optional[str],
                         contact_details: Optional[str], is_priority: bool):
@@ -494,6 +514,7 @@ class ApplicationDB:
             (job_title, company, software, notes, contact_name, contact_details, is_priority)
         )
         self.conn.commit()
+
 
     def add_recruiter_contact(self, recruiter_name: str, recruiting_company: str,
                               contact_details: Optional[str], initial_call_date: str,
@@ -511,10 +532,12 @@ class ApplicationDB:
         )
         self.conn.commit()
 
+
     def delete_application(self, app_id: int):
         """Delete an application."""
         self.cursor.execute("DELETE FROM application_tracking WHERE id = %s", (app_id,))
         self.conn.commit()
+
 
     def update_interview(self, app_id: int, interview_date: str, interview_time: Optional[str],
                          interviewer_name: str, prep_notes: Optional[str]):
@@ -527,6 +550,7 @@ class ApplicationDB:
             (interview_date, interview_time, interviewer_name, prep_notes, app_id)
         )
         self.conn.commit()
+
 
     def update_notes(self, app_id: int, new_notes: str, append: bool = True):
         """Update or append notes."""
@@ -544,6 +568,7 @@ class ApplicationDB:
         )
         self.conn.commit()
 
+
     def update_priority(self, app_id: int, is_priority: bool):
         """Update priority status."""
         self.cursor.execute(
@@ -556,6 +581,7 @@ class ApplicationDB:
 
 # BUSINESS LOGIC #
 # ============== #
+
 class ContactManager:
     """Handles contact information prompts and updates."""
 
@@ -591,6 +617,7 @@ class TaskProcessor:
 
     def __init__(self, db: ApplicationDB):
         self.db = db
+
 
     def process_task_completion(self, task: Tuple, today: date) -> bool:
         """Process a single task. Returns False if user exits."""
@@ -642,6 +669,7 @@ class TaskProcessor:
 
         return True
 
+
     @staticmethod
     def _display_overdue_dates(check_date, follow_up_date, interview_date,
                                second_interview_date, final_interview_date, today):
@@ -672,6 +700,7 @@ class TaskProcessor:
 
 # MENU HANDLERS #
 # ============= #
+
 def _display_backlog_task(task: Tuple, today: date):
     """Display a single backlog task."""
     (app_id, job_title, company, next_action, check_date, _, _, current_status,
@@ -734,6 +763,7 @@ class MenuHandler:
                 self._display_application_details(app_id)
             else:
                 Display.invalid_number()
+
 
     def _display_application_details(self, app_id: int):
         """Display detailed information for a single application."""
@@ -893,6 +923,7 @@ class MenuHandler:
 
         if response == 'Y':
             new_status = self.db.update_status(app_id, next_action)
+            self.db.clear_completed_task_dates(app_id, today)
             if new_status:
                 print(f"\n✅ Status auto-updated to: {Display.format_status(new_status)}\n")
             else:
@@ -915,6 +946,7 @@ class MenuHandler:
             print("\n⏭️ Skipped status update.\n")
 
         return True
+
 
     def handle_contacts(self):
         """Display all contacts (recruiters and application POCs)."""
@@ -1125,6 +1157,7 @@ class MenuHandler:
         elif choice == 6:
             self._delete_application(app_id)
 
+
     def _update_status(self, app_id: int):
         """Update application status."""
         new_status = self.db.manual_status_update(app_id)
@@ -1132,6 +1165,7 @@ class MenuHandler:
             print(f"\n✅ Status updated to: {Display.format_status(new_status)}")
         else:
             print("\n⏭️ Status update cancelled.")
+
 
     def _update_contact(self, app_id: int):
         """Update contact information."""
@@ -1143,6 +1177,7 @@ class MenuHandler:
             return
         self.db.update_contact_info(app_id, contact_name, contact_details)
         print("\n✅ Follow-up contact updated.")
+
 
     def _update_interview(self, app_id: int):
         """Update interview details."""
@@ -1158,6 +1193,7 @@ class MenuHandler:
         self.db.update_interview(app_id, interview_date, interview_time,
                                  interview_name, prep_notes)
         print("\n✅ Interview details updated.")
+
 
     def _update_notes(self, app_id: int):
         """Update notes."""
@@ -1178,6 +1214,7 @@ class MenuHandler:
         self.db.update_notes(app_id, new_notes, append=True)
         print("\n✅ Notes updated.")
 
+
     def _update_priority(self, app_id: int):
         """Update priority status."""
         response = Input.get_yes_no_exit("Mark as priority? (Y/N/X): ")
@@ -1192,6 +1229,7 @@ class MenuHandler:
             print("\n✅ Application marked as priority.")
         else:
             print("\n✅ Priority removed from application.")
+
 
     def _delete_application(self, app_id: int):
         """Delete an application."""
@@ -1228,6 +1266,7 @@ class MenuHandler:
                 break
             else:
                 print("\n❌ Please type 'DELETE' exactly to confirm, or 'X'/'N' to cancel")
+
 
     @staticmethod
     def handle_tips():
