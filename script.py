@@ -1017,8 +1017,11 @@ class MenuHandler:
 
         contact_details = Input.get_string("Contact details (email/phone/LinkedIn): ")
 
-        initial_call_date = Input.get_string("Date of initial contact (YYYY-MM-DD) or press enter for today: ")
-        if initial_call_date == "":
+        initial_call_date = input("Date of initial contact (YYYY-MM-DD) or press enter for today: ").strip()
+        if initial_call_date.upper() == 'X':
+            Display.exit_to_menu()
+            return
+        if not initial_call_date:
             initial_call_date = date.today().strftime('%Y-%m-%d')
 
         initial_call_time = Input.get_string("Time of call (HH:MM, optional): ")
