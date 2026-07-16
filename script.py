@@ -610,6 +610,39 @@ class TaskProcessor:
             return False
 
         # Show overdue dates
+        self._display_overdue_dates(check_date, follow_up_date, interview_date,
+                                    second_interview_date, final_interview_date, today)
+
+        # Mark as completed
+        response = Input.get_yes_no_exit("✅ Mark this task as completed? (Y/N/X): ")
+        if response == 'X':
+            return False
+
+        if response == 'Y':
+            new_status = self.db.update_status(app_id, next_action)
+            self.db.clear_completed_task_dates(app_id, today)
+            if new_status:
+                print(f"\n✅ Status auto-updated to: {Display.format_status(new_status)}\n")
+            else:
+                print("\n✅ Task marked as completed\n")
+
+        # Manual status update option
+        response = Input.get_yes_no_exit("\n✏️ Would you like to manually update the application status? (Y/N/X): ")
+        if response == 'X':
+            return False
+
+        if response == 'Y':
+            new_status = self.db.manual_status_update(app_id)
+            if new_status:
+                print(f"\n✅ Status manually updated to: {Display.format_status(new_status)}\n")
+            else:
+                print("\n⏭️ Skipped status update.\n")
+        else:
+            print("\n⏭️ Skipped status update.\n")
+
+        return True
+
+        # Show overdue dates
         @staticmethod
         def _display_overdue_dates(check_date, follow_up_date, interview_date,
                                    second_interview_date, final_interview_date, today):
