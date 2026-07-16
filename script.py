@@ -371,6 +371,30 @@ class ApplicationDB:
             return new_status
         return None
 
+    def clear_completed_task_dates(self, app_id: int, today: date):
+        """Clear date fields that triggered a completed task, leaving future dates intact."""
+        self.cursor.execute(
+            """UPDATE application_tracking
+               SET check_application_status = CASE
+                       WHEN check_application_status::DATE <= %s THEN NULL
+                       ELSE check_application_status END,
+                   next_follow_up_date = CASE
+                       WHEN next_follow_up_date::DATE <= %s THEN NULL
+                       ELSE next_follow_up_date END,
+                   interview_date = CASE
+                       WHEN interview_date <= %s THEN NULL
+                       ELSE interview_date END,
+                   second_interview_date = CASE
+                       WHEN second_interview_date <= %s THEN NULL
+                       ELSE second_interview_date END,
+                   final_interview_date = CASE
+                       WHEN final_interview_date <= %s THEN NULL
+                       ELSE final_interview_date END
+               WHERE id = %s""",
+            (today, today, today, today, today, app_id)
+        )
+        self.conn.commit()
+
     def manual_status_update(self, app_id: int) -> Optional[str]:
         """Prompt user to manually update application status."""
         print("\n📌 Select new status:")
