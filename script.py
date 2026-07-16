@@ -480,10 +480,10 @@ class ApplicationDB:
             """INSERT INTO application_tracking 
                (source_type, recruiter_name, recruiting_company, follow_up_contact_details,
                 initial_call_date, initial_call_time, job_notes, is_priority,
-                application_status)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                application_status, date_applied)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
             ('recruiter', recruiter_name, recruiting_company, contact_details,
-             initial_call_date, initial_call_time, notes, is_priority, 'applied')
+             initial_call_date, initial_call_time, notes, is_priority, 'applied', None)
         )
         self.conn.commit()
 
