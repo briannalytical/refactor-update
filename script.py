@@ -568,30 +568,6 @@ class TaskProcessor:
     def __init__(self, db: ApplicationDB):
         self.db = db
 
-    def clear_completed_task_dates(self, app_id: int, today: date):
-        """Clear date fields that triggered a completed task, leaving future dates intact."""
-        self.cursor.execute(
-            """UPDATE application_tracking
-               SET check_application_status = CASE
-                       WHEN check_application_status::DATE <= %s THEN NULL
-                       ELSE check_application_status END,
-                   next_follow_up_date = CASE
-                       WHEN next_follow_up_date::DATE <= %s THEN NULL
-                       ELSE next_follow_up_date END,
-                   interview_date = CASE
-                       WHEN interview_date <= %s THEN NULL
-                       ELSE interview_date END,
-                   second_interview_date = CASE
-                       WHEN second_interview_date <= %s THEN NULL
-                       ELSE second_interview_date END,
-                   final_interview_date = CASE
-                       WHEN final_interview_date <= %s THEN NULL
-                       ELSE final_interview_date END
-               WHERE id = %s""",
-            (today, today, today, today, today, app_id)
-        )
-        self.conn.commit()
-
     def process_task_completion(self, task: Tuple, today: date) -> bool:
         """Process a single task. Returns False if user exits."""
         (app_id, job_title, company, next_action, check_date, contact_name,
@@ -642,77 +618,27 @@ class TaskProcessor:
 
         return True
 
-        # Show overdue dates
-        @staticmethod
-        def _display_overdue_dates(check_date, follow_up_date, interview_date,
-                                   second_interview_date, final_interview_date, today):
-            """Display overdue dates for a task."""
-
-            def as_date(val):
-                # TIMESTAMP columns arrive as datetime; DATE columns arrive as date
-                return val.date() if isinstance(val, datetime) else val
-
-            labeled_dates = [
-                ("Check status", check_date),
-                ("Follow up", follow_up_date),
-                ("Interview", interview_date),
-                ("2nd Interview", second_interview_date),
-                ("Final Interview", final_interview_date),
-            ]
-
-            overdue_dates = []
-            for label, val in labeled_dates:
-                d = as_date(val)
-                if d and d < today:
-                    overdue_dates.append(f"{label}: {d.strftime('%B %d, %Y')}")
-
-            if overdue_dates:
-                print(f"   → Overdue: {', '.join(overdue_dates)}")
-            print()
-
-        # Mark as completed
-        response = Input.get_yes_no_exit("✅ Mark this task as completed? (Y/N/X): ")
-        if response == 'X':
-            return False
-
-        if response == 'Y':
-            new_status = self.db.update_status(app_id, next_action)
-            if new_status:
-                print(f"\n✅ Status auto-updated to: {Display.format_status(new_status)}\n")
-            else:
-                print("\n✅ Task marked as completed\n")
-
-        # Manual status update option
-        response = Input.get_yes_no_exit("\n✏️ Would you like to manually update the application status? (Y/N/X): ")
-        if response == 'X':
-            return False
-
-        if response == 'Y':
-            new_status = self.db.manual_status_update(app_id)
-            if new_status:
-                print(f"\n✅ Status manually updated to: {Display.format_status(new_status)}\n")
-            else:
-                print("\n⏭️ Skipped status update.\n")
-        else:
-            print("\n⏭️ Skipped status update.\n")
-
-        return True
-
     @staticmethod
     def _display_overdue_dates(check_date, follow_up_date, interview_date,
                                second_interview_date, final_interview_date, today):
         """Display overdue dates for a task."""
+        def as_date(val):
+            # TIMESTAMP columns arrive as datetime; DATE columns arrive as date
+            return val.date() if isinstance(val, datetime) else val
+
+        labeled_dates = [
+            ("Check status", check_date),
+            ("Follow up", follow_up_date),
+            ("Interview", interview_date),
+            ("2nd Interview", second_interview_date),
+            ("Final Interview", final_interview_date),
+        ]
+
         overdue_dates = []
-        if check_date and check_date.date() < today:
-            overdue_dates.append(f"Check status: {check_date.strftime('%B %d, %Y')}")
-        if follow_up_date and follow_up_date.date() < today:
-            overdue_dates.append(f"Follow up: {follow_up_date.strftime('%B %d, %Y')}")
-        if interview_date and interview_date.date() < today:
-            overdue_dates.append(f"Interview: {interview_date.strftime('%B %d, %Y')}")
-        if second_interview_date and second_interview_date.date() < today:
-            overdue_dates.append(f"2nd Interview: {second_interview_date.strftime('%B %d, %Y')}")
-        if final_interview_date and final_interview_date.date() < today:
-            overdue_dates.append(f"Final Interview: {final_interview_date.strftime('%B %d, %Y')}")
+        for label, val in labeled_dates:
+            d = as_date(val)
+            if d and d < today:
+                overdue_dates.append(f"{label}: {d.strftime('%B %d, %Y')}")
 
         if overdue_dates:
             print(f"   → Overdue: {', '.join(overdue_dates)}")
