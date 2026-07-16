@@ -124,15 +124,26 @@ def initialize_database(cursor, conn):
 
     # Create trigger for updated_at
     cursor.execute("""
-        DO $$ BEGIN
-            CREATE TRIGGER trigger_update_updated_at
-                BEFORE UPDATE ON application_tracking
-                FOR EACH ROW
-                EXECUTE FUNCTION update_updated_at_column();
-        EXCEPTION
-            WHEN duplicate_object THEN null;
-        END $$;
-    """)
+            DO $$ BEGIN
+                CREATE TRIGGER trigger_update_updated_at
+                    BEFORE UPDATE ON application_tracking
+                    FOR EACH ROW
+                    EXECUTE FUNCTION update_updated_at_column();
+            EXCEPTION
+                WHEN duplicate_object THEN null;
+            END $$;
+        """)
+
+    # Data migration: clean up recruiter rows that the old trigger
+    # incorrectly stamped with application-style dates
+    cursor.execute("""
+            UPDATE application_tracking
+            SET check_application_status = NULL,
+                date_applied = NULL
+            WHERE source_type = 'recruiter'
+              AND (check_application_status IS NOT NULL
+                   OR date_applied IS NOT NULL);
+        """)
 
     conn.commit()
     print("✅ Database schema initialized successfully!")
