@@ -90,7 +90,8 @@ def initialize_database(cursor, conn):
         CREATE OR REPLACE FUNCTION set_check_application_status()
         RETURNS TRIGGER AS $$
         BEGIN
-            IF NEW.application_status = 'applied' THEN
+            IF NEW.application_status = 'applied'
+               AND COALESCE(NEW.source_type, 'application') <> 'recruiter' THEN
                 NEW.check_application_status := NEW.date_applied + INTERVAL '2 weeks';
             END IF;
             RETURN NEW;
@@ -574,8 +575,32 @@ class TaskProcessor:
             return False
 
         # Show overdue dates
-        self._display_overdue_dates(check_date, follow_up_date, interview_date,
-                                    second_interview_date, final_interview_date, today)
+        @staticmethod
+        def _display_overdue_dates(check_date, follow_up_date, interview_date,
+                                   second_interview_date, final_interview_date, today):
+            """Display overdue dates for a task."""
+
+            def as_date(val):
+                # TIMESTAMP columns arrive as datetime; DATE columns arrive as date
+                return val.date() if isinstance(val, datetime) else val
+
+            labeled_dates = [
+                ("Check status", check_date),
+                ("Follow up", follow_up_date),
+                ("Interview", interview_date),
+                ("2nd Interview", second_interview_date),
+                ("Final Interview", final_interview_date),
+            ]
+
+            overdue_dates = []
+            for label, val in labeled_dates:
+                d = as_date(val)
+                if d and d < today:
+                    overdue_dates.append(f"{label}: {d.strftime('%B %d, %Y')}")
+
+            if overdue_dates:
+                print(f"   → Overdue: {', '.join(overdue_dates)}")
+            print()
 
         # Mark as completed
         response = Input.get_yes_no_exit("✅ Mark this task as completed? (Y/N/X): ")
