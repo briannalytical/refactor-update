@@ -85,6 +85,32 @@ def initialize_database(cursor, conn):
         );
     """)
 
+    # Self-healing migration: if the table already existed from an older
+    # version of this script, make sure every column above is present.
+    # (CREATE TABLE IF NOT EXISTS never modifies an existing table.)
+    cursor.execute("""
+        ALTER TABLE application_tracking
+            ADD COLUMN IF NOT EXISTS next_action next_action_enum,
+            ADD COLUMN IF NOT EXISTS check_application_status TIMESTAMP,
+            ADD COLUMN IF NOT EXISTS next_follow_up_date TIMESTAMP,
+            ADD COLUMN IF NOT EXISTS interview_date DATE,
+            ADD COLUMN IF NOT EXISTS interview_time TIME,
+            ADD COLUMN IF NOT EXISTS interviewer_name VARCHAR(255),
+            ADD COLUMN IF NOT EXISTS interview_prep_notes TEXT,
+            ADD COLUMN IF NOT EXISTS second_interview_date DATE,
+            ADD COLUMN IF NOT EXISTS final_interview_date DATE,
+            ADD COLUMN IF NOT EXISTS is_priority BOOLEAN DEFAULT FALSE,
+            ADD COLUMN IF NOT EXISTS source_type VARCHAR(20) DEFAULT 'application',
+            ADD COLUMN IF NOT EXISTS recruiter_name VARCHAR(255),
+            ADD COLUMN IF NOT EXISTS recruiting_company VARCHAR(255),
+            ADD COLUMN IF NOT EXISTS initial_call_date DATE,
+            ADD COLUMN IF NOT EXISTS initial_call_time TIME,
+            ADD COLUMN IF NOT EXISTS resume_sent BOOLEAN DEFAULT FALSE,
+            ADD COLUMN IF NOT EXISTS resume_sent_date DATE,
+            ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+    """)
+
     # Create function to automatically set check_application_status date
     cursor.execute("""
         CREATE OR REPLACE FUNCTION set_check_application_status()
@@ -124,26 +150,26 @@ def initialize_database(cursor, conn):
 
     # Create trigger for updated_at
     cursor.execute("""
-            DO $$ BEGIN
-                CREATE TRIGGER trigger_update_updated_at
-                    BEFORE UPDATE ON application_tracking
-                    FOR EACH ROW
-                    EXECUTE FUNCTION update_updated_at_column();
-            EXCEPTION
-                WHEN duplicate_object THEN null;
-            END $$;
-        """)
+        DO $$ BEGIN
+            CREATE TRIGGER trigger_update_updated_at
+                BEFORE UPDATE ON application_tracking
+                FOR EACH ROW
+                EXECUTE FUNCTION update_updated_at_column();
+        EXCEPTION
+            WHEN duplicate_object THEN null;
+        END $$;
+    """)
 
     # Data migration: clean up recruiter rows that the old trigger
     # incorrectly stamped with application-style dates
     cursor.execute("""
-            UPDATE application_tracking
-            SET check_application_status = NULL,
-                date_applied = NULL
-            WHERE source_type = 'recruiter'
-              AND (check_application_status IS NOT NULL
-                   OR date_applied IS NOT NULL);
-        """)
+        UPDATE application_tracking
+        SET check_application_status = NULL,
+            date_applied = NULL
+        WHERE source_type = 'recruiter'
+          AND (check_application_status IS NOT NULL
+               OR date_applied IS NOT NULL);
+    """)
 
     conn.commit()
     print("✅ Database schema initialized successfully!")
