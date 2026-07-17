@@ -1242,9 +1242,11 @@ class MenuHandler:
             return
         prep_notes = Input.get_string("Any prep notes? (optional): ")
 
-        self.db.update_interview(app_id, interview_date, interview_time,
-                                 interview_name, prep_notes)
+        new_status = self.db.update_interview(app_id, interview_date, interview_time,
+                                              interview_name, prep_notes)
         print("\n✅ Interview details updated.")
+        if new_status:
+            print(f"✅ Status updated to: {Display.format_status(new_status)}")
 
 
     def _update_notes(self, app_id: int):
