@@ -564,10 +564,11 @@ class ApplicationDB:
         self.cursor.execute("DELETE FROM application_tracking WHERE id = %s", (app_id,))
         self.conn.commit()
 
-
     def update_interview(self, app_id: int, interview_date: str, interview_time: Optional[str],
-                         interviewer_name: str, prep_notes: Optional[str]):
-        """Update interview details."""
+                         interviewer_name: str, prep_notes: Optional[str]) -> Optional[str]:
+        """Update interview details and advance status if appropriate.
+
+        Returns the new status if it was changed, else None."""
         self.cursor.execute(
             """UPDATE application_tracking 
                SET interview_date = %s, interview_time = %s, 
@@ -575,7 +576,32 @@ class ApplicationDB:
                WHERE id = %s""",
             (interview_date, interview_time, interviewer_name, prep_notes, app_id)
         )
+
+        # Advance status to the matching 'scheduled' state, never backward
+        self.cursor.execute(
+            "SELECT application_status FROM application_tracking WHERE id = %s",
+            (app_id,)
+        )
+        row = self.cursor.fetchone()
+        current_status = row[0] if row else None
+
+        status_progression = {
+            'applied': 'interviewing_first_scheduled',
+            'interviewing_first_completed': 'interviewing_second_scheduled',
+            'interviewing_first_followed_up': 'interviewing_second_scheduled',
+            'interviewing_second_completed': 'interviewing_final_scheduled',
+            'interviewing_second_followed_up': 'interviewing_final_scheduled',
+        }
+
+        new_status = status_progression.get(current_status)
+        if new_status:
+            self.cursor.execute(
+                "UPDATE application_tracking SET application_status = %s WHERE id = %s",
+                (new_status, app_id)
+            )
+
         self.conn.commit()
+        return new_status
 
 
     def update_notes(self, app_id: int, new_notes: str, append: bool = True):
