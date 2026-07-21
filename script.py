@@ -814,20 +814,30 @@ class MenuHandler:
             print(f"   Date Applied: {Display.format_datetime(date_applied)}")
             print("=" * 60)
 
-        # View details
+        # View details or update
         while True:
-            app_id = Input.get_number("\nEnter application ID to view details, or press X to exit: ",
-                                      1, 999999)
+            app_id = Input.get_number("\nEnter an application ID, or press X to exit: ",
+                                          1, 999999)
             if app_id is None:
                 Display.exit_to_menu()
                 return
 
-            # Find and display application
+            # Find the application
             selected = next((app for app in applications if app[2] == app_id), None)
-            if selected:
+            if not selected:
+                Display.invalid_number()
+                continue
+
+            choice = Input.get_choice("(V)iew details or (U)pdate this application? (V/U, or X): ",
+                                          ['V', 'U'])
+            if choice is None:
+                Display.exit_to_menu()
+                return
+
+            if choice == 'V':
                 self._display_application_details(app_id)
             else:
-                Display.invalid_number()
+                self._handle_update_menu(app_id)
 
 
     def _display_application_details(self, app_id: int):
