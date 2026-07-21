@@ -387,6 +387,19 @@ class Input:
         return value if value else None
 
 
+    @staticmethod
+    def get_choice(prompt: str, options: List[str]) -> Optional[str]:
+        """Get a single-letter choice from a list of options. Returns None if user exits."""
+        valid = [opt.upper() for opt in options]
+        while True:
+            response = input(prompt).strip().upper()
+            if response == 'X':
+                return None
+            if response in valid:
+                return response
+            Display.invalid_letter()
+
+
 
 # DATABASE OPERATIONS #
 # =================== #
