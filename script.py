@@ -480,6 +480,21 @@ class ApplicationDB:
         self.conn.commit()
 
 
+    def update_job_info(self, app_id: int, job_title: Optional[str],
+                        company: Optional[str]):
+        """Update the job title and/or hiring company for an entry.
+
+        Only overwrites fields where a new value was given."""
+        self.cursor.execute(
+            """UPDATE application_tracking
+               SET job_title = COALESCE(%s, job_title),
+                   company = COALESCE(%s, company)
+               WHERE id = %s""",
+            (job_title, company, app_id)
+        )
+        self.conn.commit()
+
+
     def get_all_applications(self, active_only: bool = False) -> List[Tuple]:
         """Retrieve all applications."""
         query = """
@@ -502,6 +517,7 @@ class ApplicationDB:
             (app_id,)
         )
         return self.cursor.fetchone()
+
 
     def get_backlog_tasks(self, today: date) -> List[Tuple]:
         """Get overdue tasks."""
