@@ -1131,7 +1131,6 @@ class MenuHandler:
                                 contact_name, contact_details, is_priority)
         print("\n✅ Application added! I'll remind you when you have tasks related to this job. 😊")
 
-
     def _handle_recruiter_outreach(self):
         """Handle adding a recruiter contact."""
         print("\nEnter recruiter contact details:")
@@ -1159,16 +1158,24 @@ class MenuHandler:
 
         notes = Input.get_string("Any notes about the conversation? (optional): ")
 
+        # Optional: specific job this recruiter reached out about
+        job_title = None
+        hiring_company = None
+        response = Input.get_yes_no("Did they reach out about a specific job? (Y/N): ")
+        if response == 'Y':
+            job_title = Input.get_string("Job title: ")
+            hiring_company = Input.get_string("Hiring company (the company the job is at): ")
+
         is_priority = Input.get_yes_no("Mark as priority? (Y/N): ") == 'Y'
 
-        # Add recruiter entry
         self.db.add_recruiter_contact(
             recruiter_name, recruiting_company, contact_details,
-            initial_call_date, initial_call_time, notes, is_priority
+            initial_call_date, initial_call_time, notes, is_priority,
+            job_title, hiring_company
         )
 
         print("\n✅ Recruiter contact added!")
-        print("💡 Tip: You can link a specific role to this recruiter later via the UPDATE menu.")
+        print("💡 Tip: You can add or edit the job later via the UPDATE menu.")
 
 
     def handle_update(self):
@@ -1220,7 +1227,6 @@ class MenuHandler:
 
         self._handle_update_menu(app_id)
 
-
     def _handle_update_menu(self, app_id: int):
         """Handle the update submenu."""
         print("\nWhat do you want to update?")
@@ -1230,8 +1236,9 @@ class MenuHandler:
         print("4. Notes")
         print("5. Update priority")
         print("6. Delete Entry")
+        print("7. Job/role info (title & hiring company)")
 
-        choice = Input.get_number("\nField to update (1-6, or X to exit): ", 1, 6)
+        choice = Input.get_number("\nField to update (1-7, or X to exit): ", 1, 7)
         if choice is None:
             Display.exit_to_menu()
             return
@@ -1248,6 +1255,8 @@ class MenuHandler:
             self._update_priority(app_id)
         elif choice == 6:
             self._delete_application(app_id)
+        elif choice == 7:
+            self._update_job_info(app_id)
 
 
     def _update_status(self, app_id: int):
