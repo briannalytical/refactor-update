@@ -610,6 +610,31 @@ class ApplicationDB:
         )
         self.conn.commit()
 
+    def get_dormant_recruiters(self, today: date) -> List[Tuple]:
+        """Get recruiter contacts with no job attached and no activity in 14+ days."""
+        query = """
+            SELECT id, recruiter_name, recruiting_company, follow_up_contact_details,
+                   updated_at, is_priority
+            FROM application_tracking
+            WHERE source_type = 'recruiter'
+              AND job_title IS NULL
+              AND application_status != 'rejected'
+              AND updated_at::DATE <= %s - INTERVAL '14 days'
+              AND next_follow_up_date IS NULL
+            ORDER BY is_priority DESC, updated_at ASC
+        """
+        self.cursor.execute(query, (today,))
+        return self.cursor.fetchall()
+
+
+    def touch_recruiter(self, app_id: int):
+        """Reset the dormancy clock on a recruiter contact."""
+        self.cursor.execute(
+            "UPDATE application_tracking SET updated_at = CURRENT_TIMESTAMP WHERE id = %s",
+            (app_id,)
+        )
+        self.conn.commit()
+
 
     def delete_application(self, app_id: int):
         """Delete an application."""
