@@ -1031,7 +1031,6 @@ class MenuHandler:
                 print(f"📌 {job_title} @ {company} - {task_name}")
             print("-" * 60)
 
-
     def _process_daily_task(self, task: Tuple, today: date, incomplete_tasks: List) -> bool:
         """Process a single daily task. Returns False if user exits."""
         (app_id, job_title, company, next_action, _, contact_name, contact_details,
@@ -1040,19 +1039,21 @@ class MenuHandler:
 
         # Determine task type
         if interview_date == today or second_interview_date == today or final_interview_date == today:
-            due_type = "Interview"
+            due_type = "Recruiter Call" if job_title is None else "Interview"
         else:
             due_type = "Follow Up"
 
         # Display task
         priority_indicator = " ‼️" if is_priority else ""
-        print(f"📌 {job_title} @ {company}{priority_indicator}")
+        display_title = job_title if job_title else "Recruiter Contact"
+        display_company = company if company else "TBD"
+        print(f"📌 {display_title} @ {display_company}{priority_indicator}")
         print(f"   → Current Status: {Display.format_status(current_status)}")
         if next_action:
             print(f"   → Task: {next_action.replace('_', ' ').title()}")
         print(f"   → Type: {due_type}")
         if interview_time:
-            print(f"   → Interview Time: {interview_time.strftime('%I:%M %p')}")
+            print(f"   → Time: {interview_time.strftime('%I:%M %p')}")
 
         # Check contact info
         if not ContactManager.prompt_for_contact_info(self.db, app_id, contact_name, contact_details):
@@ -1064,28 +1065,38 @@ class MenuHandler:
             return False
 
         if response == 'Y':
-            new_status = self.db.update_status(app_id, next_action)
-            self.db.clear_completed_task_dates(app_id, today)
-            if new_status:
-                print(f"\n✅ Status auto-updated to: {Display.format_status(new_status)}\n")
+            if job_title is None:
+                # Recruiter call with no job attached — clear the scheduled call,
+                # don't touch application_status
+                self.db.cursor.execute(
+                    "UPDATE application_tracking SET interview_date = NULL, interview_time = NULL WHERE id = %s",
+                    (app_id,)
+                )
+                self.db.conn.commit()
+                print("\n✅ Call completed! Add job details via UPDATE if they pitched a role. 😊\n")
             else:
-                print("\n✅ Task marked as completed\n")
+                new_status = self.db.update_status(app_id, next_action)
+                if new_status:
+                    print(f"\n✅ Status auto-updated to: {Display.format_status(new_status)}\n")
+                else:
+                    print("\n✅ Task marked as completed\n")
         else:
-            incomplete_tasks.append((job_title, company, next_action or "Follow up"))
+            incomplete_tasks.append((display_title, display_company, next_action or "Follow up"))
 
-        # Manual status update
-        response = Input.get_yes_no_exit("\n✏️ Would you like to manually update the application status? (Y/N/X): ")
-        if response == 'X':
-            return False
+        # Manual status update — skip for jobless recruiter entries, statuses don't apply yet
+        if job_title is not None:
+            response = Input.get_yes_no_exit("\n✏️ Would you like to manually update the application status? (Y/N/X): ")
+            if response == 'X':
+                return False
 
-        if response == 'Y':
-            new_status = self.db.manual_status_update(app_id)
-            if new_status:
-                print(f"\n✅ Status manually updated to: {Display.format_status(new_status)}\n")
+            if response == 'Y':
+                new_status = self.db.manual_status_update(app_id)
+                if new_status:
+                    print(f"\n✅ Status manually updated to: {Display.format_status(new_status)}\n")
+                else:
+                    print("\n⏭️ Skipped status update.\n")
             else:
                 print("\n⏭️ Skipped status update.\n")
-        else:
-            print("\n⏭️ Skipped status update.\n")
 
         return True
 
@@ -1163,6 +1174,36 @@ class MenuHandler:
                 print("\n✅ Noted! I'll nudge you again if things go quiet for another 14 days.\n")
             else:
                 print("\n⏭️ Skipped.\n")
+
+    def _schedule_recruiter_call(self, app_id: int):
+        """Schedule a call with a recruiter."""
+        call_date = Input.get_string("Enter call date (YYYY-MM-DD): ")
+        if call_date is None:
+            return
+
+        try:
+            datetime.strptime(call_date, '%Y-%m-%d')
+        except ValueError:
+            print("\n❌ Invalid date format. Please use YYYY-MM-DD (e.g., 2026-07-30)")
+            return
+
+        call_time = Input.get_string("Enter call time (HH:MM, optional): ")
+        if call_time:
+            try:
+                datetime.strptime(call_time, '%H:%M')
+            except ValueError:
+                print("\n❌ Invalid time format. Please use HH:MM (e.g., 14:30)")
+                return
+
+        self.db.cursor.execute(
+            """UPDATE application_tracking
+               SET interview_date = %s, interview_time = %s
+               WHERE id = %s""",
+            (call_date, call_time or None, app_id)
+        )
+        self.db.conn.commit()
+        print("\n✅ Recruiter call scheduled! It'll show up in your tasks that day.")
+
 
     def handle_enter(self):
         """Handle ENTER menu option - add new application or recruiter contact."""
