@@ -958,6 +958,9 @@ class MenuHandler:
         """Handle TASKS menu option."""
         today = date.today()
 
+        # Check for recruiter contacts that have gone quiet
+        self._process_dormant_recruiters(today)
+
         # Check backlog
         backlog_tasks = self.db.get_backlog_tasks(today)
 
@@ -1133,6 +1136,33 @@ class MenuHandler:
 
         print(f"\nTotal contacts: {len(contacts)}")
 
+
+    def _process_dormant_recruiters(self, today: date):
+        """Surface recruiter contacts that have gone quiet for 14+ days."""
+        dormant = self.db.get_dormant_recruiters(today)
+        if not dormant:
+            return
+
+        print(f"\n📞 You have {len(dormant)} recruiter contact(s) with no activity in 14+ days!")
+        print("💡 A quick check-in about new openings keeps the relationship warm.")
+        print("-" * 60)
+
+        for rec in dormant:
+            rec_id, name, rec_company, contact_details, updated_at, is_priority = rec
+            priority_indicator = " ‼️" if is_priority else ""
+            print(f"👔 {name} @ {rec_company or 'Unknown'} ({rec_id}){priority_indicator}")
+            if contact_details:
+                print(f"   → Contact: {contact_details}")
+            print(f"   → Last activity: {updated_at.strftime('%B %d, %Y')}")
+
+            response = Input.get_yes_no_exit("\n✅ Mark as followed up? (Y/N/X): ")
+            if response == 'X':
+                return
+            if response == 'Y':
+                self.db.touch_recruiter(rec_id)
+                print("\n✅ Noted! I'll nudge you again if things go quiet for another 14 days.\n")
+            else:
+                print("\n⏭️ Skipped.\n")
 
     def handle_enter(self):
         """Handle ENTER menu option - add new application or recruiter contact."""
