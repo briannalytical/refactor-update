@@ -19,6 +19,11 @@ pip install -r requirements.txt
 
 # Install Python interpreter (if needed)
 pip install python3
+
+# Set up Python environment & imports
+python3 -m venv .venv
+source .venv/bin/activate
+pip install psycopg2-binary
 ```
 
 ## Configuration
