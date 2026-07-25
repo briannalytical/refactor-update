@@ -3,11 +3,17 @@ import psycopg2
 from datetime import date, datetime
 from typing import Optional, Tuple, List, Dict, Any
 from psycopg2.extensions import cursor as PgCursor, connection as PgConnection
+import os
+from dotenv import load_dotenv
 
 
 
 ### DATABASE SCHEMA INITIALIZATION ###
 ### ============================== ###
+
+load_dotenv()
+print("DB URL:", os.getenv("DATABASE_URL"))
+
 def initialize_database(cursor, conn):
     """Initialize database schema if it doesn't exist."""
 
@@ -201,11 +207,7 @@ def initialize_database(cursor, conn):
 # CONFIGURATION & CONSTANTS #
 # ========================= #
 DB_CONFIG = {
-    'dbname': 'postgres',
-    'user': 'postgres',
-    'password': 'your_password_here',
-    'host': 'localhost',
-    'port': '5432'
+    'dsn': os.getenv("DATABASE_URL")
 }
 
 AUTO_STATUS_MAP = {
