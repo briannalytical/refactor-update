@@ -111,19 +111,23 @@ def initialize_database(cursor, conn):
             ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
     """)
 
-    # Create function to automatically set check_application_status date
+    # Create function to automatically set follow-up dates on new applications
     cursor.execute("""
-        CREATE OR REPLACE FUNCTION set_check_application_status()
-        RETURNS TRIGGER AS $$
-        BEGIN
-            IF NEW.application_status = 'applied'
-               AND COALESCE(NEW.source_type, 'application') <> 'recruiter' THEN
-                NEW.check_application_status := NEW.date_applied + INTERVAL '2 weeks';
-            END IF;
-            RETURN NEW;
-        END;
-        $$ LANGUAGE plpgsql;
-    """)
+            CREATE OR REPLACE FUNCTION set_check_application_status()
+            RETURNS TRIGGER AS $$
+            BEGIN
+                IF NEW.application_status = 'applied'
+                   AND NEW.job_title IS NOT NULL
+                   AND NEW.date_applied IS NOT NULL THEN
+                    -- Check status: 2 business days after applying
+                    NEW.check_application_status := add_business_days(NEW.date_applied, 2);
+                    -- Follow up: 3 business days after applying
+                    NEW.next_follow_up_date := add_business_days(NEW.date_applied, 3);
+                END IF;
+                RETURN NEW;
+            END;
+            $$ LANGUAGE plpgsql;
+        """)
 
     # Create trigger if it doesn't exist
     cursor.execute("""
@@ -170,6 +174,30 @@ def initialize_database(cursor, conn):
           AND (check_application_status IS NOT NULL
                OR date_applied IS NOT NULL);
     """)
+
+    # Helper function: add N business days to a date (skips Sat/Sun)
+    cursor.execute("""
+            CREATE OR REPLACE FUNCTION add_business_days(start_date DATE, num_days INTEGER)
+            RETURNS DATE AS $$
+            DECLARE
+                result_date DATE := start_date;
+                days_added INTEGER := 0;
+            BEGIN
+                -- NULL-safe guard: without this, a NULL start_date loops forever
+                IF start_date IS NULL OR num_days IS NULL THEN
+                    RETURN NULL;
+                END IF;
+                WHILE days_added < num_days LOOP
+                    result_date := result_date + 1;
+                    -- DOW: 0 = Sunday, 6 = Saturday
+                    IF EXTRACT(DOW FROM result_date) NOT IN (0, 6) THEN
+                        days_added := days_added + 1;
+                    END IF;
+                END LOOP;
+                RETURN result_date;
+            END;
+            $$ LANGUAGE plpgsql;
+        """)
 
     conn.commit()
     print("✅ Database schema initialized successfully!")
