@@ -111,7 +111,6 @@ def initialize_database(cursor, conn):
             ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
     """)
 
-<<<<<<< HEAD
     # Create function to automatically set follow-up dates on new applications
     cursor.execute("""
             CREATE OR REPLACE FUNCTION set_check_application_status()
@@ -129,7 +128,7 @@ def initialize_database(cursor, conn):
             END;
             $$ LANGUAGE plpgsql;
         """)
-=======
+
     # Helper function: add N business days to a date (skips Sat/Sun)
     cursor.execute("""
         CREATE OR REPLACE FUNCTION add_business_days(start_date DATE, num_days INTEGER)
@@ -165,7 +164,6 @@ def initialize_database(cursor, conn):
         END;
         $$ LANGUAGE plpgsql;
     """)
->>>>>>> 25eb9f27caa8f73d108f82f601ada0c603a21b06
 
     # Create trigger if it doesn't exist
     cursor.execute("""
@@ -215,27 +213,27 @@ def initialize_database(cursor, conn):
 
     # Helper function: add N business days to a date (skips Sat/Sun)
     cursor.execute("""
-            CREATE OR REPLACE FUNCTION add_business_days(start_date DATE, num_days INTEGER)
-            RETURNS DATE AS $$
-            DECLARE
-                result_date DATE := start_date;
-                days_added INTEGER := 0;
-            BEGIN
-                -- NULL-safe guard: without this, a NULL start_date loops forever
-                IF start_date IS NULL OR num_days IS NULL THEN
-                    RETURN NULL;
+        CREATE OR REPLACE FUNCTION add_business_days(start_date DATE, num_days INTEGER)
+        RETURNS DATE AS $$
+        DECLARE
+            result_date DATE := start_date;
+            days_added INTEGER := 0;
+        BEGIN
+            -- NULL-safe guard: without this, a NULL start_date loops forever
+            IF start_date IS NULL OR num_days IS NULL THEN
+                RETURN NULL;
+            END IF;
+            WHILE days_added < num_days LOOP
+                result_date := result_date + 1;
+                -- DOW: 0 = Sunday, 6 = Saturday
+                IF EXTRACT(DOW FROM result_date) NOT IN (0, 6) THEN
+                    days_added := days_added + 1;
                 END IF;
-                WHILE days_added < num_days LOOP
-                    result_date := result_date + 1;
-                    -- DOW: 0 = Sunday, 6 = Saturday
-                    IF EXTRACT(DOW FROM result_date) NOT IN (0, 6) THEN
-                        days_added := days_added + 1;
-                    END IF;
-                END LOOP;
-                RETURN result_date;
-            END;
-            $$ LANGUAGE plpgsql;
-        """)
+            END LOOP;
+            RETURN result_date;
+        END;
+        $$ LANGUAGE plpgsql;
+    """)
 
     conn.commit()
     print("✅ Database schema initialized successfully!")
