@@ -111,6 +111,7 @@ def initialize_database(cursor, conn):
             ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
     """)
 
+<<<<<<< HEAD
     # Create function to automatically set follow-up dates on new applications
     cursor.execute("""
             CREATE OR REPLACE FUNCTION set_check_application_status()
@@ -128,6 +129,43 @@ def initialize_database(cursor, conn):
             END;
             $$ LANGUAGE plpgsql;
         """)
+=======
+    # Helper function: add N business days to a date (skips Sat/Sun)
+    cursor.execute("""
+        CREATE OR REPLACE FUNCTION add_business_days(start_date DATE, num_days INTEGER)
+        RETURNS DATE AS $$
+        DECLARE
+            result_date DATE := start_date;
+            days_added INTEGER := 0;
+        BEGIN
+            WHILE days_added < num_days LOOP
+                result_date := result_date + 1;
+                -- DOW: 0 = Sunday, 6 = Saturday
+                IF EXTRACT(DOW FROM result_date) NOT IN (0, 6) THEN
+                    days_added := days_added + 1;
+                END IF;
+            END LOOP;
+            RETURN result_date;
+        END;
+        $$ LANGUAGE plpgsql;
+    """)
+
+    # Create function to automatically set follow-up dates on new applications
+    cursor.execute("""
+        CREATE OR REPLACE FUNCTION set_check_application_status()
+        RETURNS TRIGGER AS $$
+        BEGIN
+            IF NEW.application_status = 'applied' AND NEW.job_title IS NOT NULL THEN
+                -- Check status: 2 business days after applying
+                NEW.check_application_status := add_business_days(NEW.date_applied, 2);
+                -- Follow up: 3 business days after applying
+                NEW.next_follow_up_date := add_business_days(NEW.date_applied, 3);
+            END IF;
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql;
+    """)
+>>>>>>> 25eb9f27caa8f73d108f82f601ada0c603a21b06
 
     # Create trigger if it doesn't exist
     cursor.execute("""
@@ -616,6 +654,31 @@ class ApplicationDB:
         )
         self.conn.commit()
 
+    def get_dormant_recruiters(self, today: date) -> List[Tuple]:
+        """Get recruiter contacts with no job attached and no activity in 14+ days."""
+        query = """
+            SELECT id, recruiter_name, recruiting_company, follow_up_contact_details,
+                   updated_at, is_priority
+            FROM application_tracking
+            WHERE source_type = 'recruiter'
+              AND job_title IS NULL
+              AND application_status != 'rejected'
+              AND updated_at::DATE <= %s - INTERVAL '14 days'
+              AND next_follow_up_date IS NULL
+            ORDER BY is_priority DESC, updated_at ASC
+        """
+        self.cursor.execute(query, (today,))
+        return self.cursor.fetchall()
+
+
+    def touch_recruiter(self, app_id: int):
+        """Reset the dormancy clock on a recruiter contact."""
+        self.cursor.execute(
+            "UPDATE application_tracking SET updated_at = CURRENT_TIMESTAMP WHERE id = %s",
+            (app_id,)
+        )
+        self.conn.commit()
+
 
     def delete_application(self, app_id: int):
         """Delete an application."""
@@ -939,6 +1002,9 @@ class MenuHandler:
         """Handle TASKS menu option."""
         today = date.today()
 
+        # Check for recruiter contacts that have gone quiet
+        self._process_dormant_recruiters(today)
+
         # Check backlog
         backlog_tasks = self.db.get_backlog_tasks(today)
 
@@ -1114,6 +1180,33 @@ class MenuHandler:
 
         print(f"\nTotal contacts: {len(contacts)}")
 
+
+    def _process_dormant_recruiters(self, today: date):
+        """Surface recruiter contacts that have gone quiet for 14+ days."""
+        dormant = self.db.get_dormant_recruiters(today)
+        if not dormant:
+            return
+
+        print(f"\n📞 You have {len(dormant)} recruiter contact(s) with no activity in 14+ days!")
+        print("💡 A quick check-in about new openings keeps the relationship warm.")
+        print("-" * 60)
+
+        for rec in dormant:
+            rec_id, name, rec_company, contact_details, updated_at, is_priority = rec
+            priority_indicator = " ‼️" if is_priority else ""
+            print(f"👔 {name} @ {rec_company or 'Unknown'} ({rec_id}){priority_indicator}")
+            if contact_details:
+                print(f"   → Contact: {contact_details}")
+            print(f"   → Last activity: {updated_at.strftime('%B %d, %Y')}")
+
+            response = Input.get_yes_no_exit("\n✅ Mark as followed up? (Y/N/X): ")
+            if response == 'X':
+                return
+            if response == 'Y':
+                self.db.touch_recruiter(rec_id)
+                print("\n✅ Noted! I'll nudge you again if things go quiet for another 14 days.\n")
+            else:
+                print("\n⏭️ Skipped.\n")
 
     def handle_enter(self):
         """Handle ENTER menu option - add new application or recruiter contact."""
