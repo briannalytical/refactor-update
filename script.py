@@ -2,8 +2,14 @@ import sys
 import psycopg2
 from datetime import date, datetime
 from typing import Optional, Tuple, List, Dict, Any
+import os
+from dotenv import load_dotenv
 from psycopg2.extensions import cursor as PgCursor, connection as PgConnection
 
+
+load_dotenv()
+
+DB_CONFIG = {'dsn': os.getenv("DATABASE_URL")}
 
 
 ### DATABASE SCHEMA INITIALIZATION ###
