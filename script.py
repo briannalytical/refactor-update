@@ -1293,6 +1293,43 @@ class MenuHandler:
                                 contact_name, contact_details, is_priority)
         print("\n✅ Application added! I'll remind you when you have tasks related to this job. 😊")
 
+
+    def _update_job_info(self, app_id: int):
+        """Update job title and/or hiring company (e.g., recruiter pitched a role)."""
+        # Show current values so you know what you're changing
+        self.db.cursor.execute(
+            "SELECT job_title, company, source_type FROM application_tracking WHERE id = %s",
+            (app_id,)
+        )
+        row = self.db.cursor.fetchone()
+        if not row:
+            print("\n❌ Application not found.")
+            return
+
+        current_title, current_company, source_type = row
+        print(f"\nCurrent job title: {current_title or '(none)'}")
+        print(f"Current hiring company: {current_company or '(none)'}")
+        print("Press Enter to keep a field as-is, or type a new value.")
+
+        job_title = Input.get_string("Job title: ")
+        hiring_company = Input.get_string("Hiring company: ")
+
+        if job_title is None and hiring_company is None:
+            Display.exit_to_menu()
+            return
+
+        if not job_title and not hiring_company:
+            print("\n⏭️ No changes made.")
+            return
+
+        self.db.update_job_info(app_id, job_title, hiring_company)
+        print("\n✅ Job info updated.")
+
+        if source_type == 'recruiter' and job_title and not current_title:
+            print(
+                "💡 This recruiter contact now has a role attached — it'll flow through the normal application workflow (interviews, statuses, tasks).")
+
+
     def _handle_recruiter_outreach(self):
         """Handle adding a recruiter contact."""
         print("\nEnter recruiter contact details:")
@@ -1388,6 +1425,7 @@ class MenuHandler:
             print(f"\nSelected: {app_id}: {display}")
 
         self._handle_update_menu(app_id)
+
 
     def _handle_update_menu(self, app_id: int):
         """Handle the update submenu."""
