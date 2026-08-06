@@ -1094,6 +1094,7 @@ class MenuHandler:
             else:
                 self._handle_update_menu(app_id)
 
+
     def _display_application_details(self, app_id: int):
         """Display detailed information for a single application."""
         # Get full application details with column names
@@ -1143,6 +1144,7 @@ class MenuHandler:
         elif response == 'Y':
             self._handle_update_menu(app_id)
 
+
     def handle_tasks(self):
         """Handle TASKS menu option."""
         today = date.today()
@@ -1167,6 +1169,7 @@ class MenuHandler:
 
         # Process today's tasks
         self._process_daily_tasks(today)
+
 
     def _process_backlog(self, backlog_tasks: List[Tuple], today: date):
         """Process backlog tasks."""
@@ -1193,6 +1196,7 @@ class MenuHandler:
             else:
                 Display.invalid_number()
 
+
     def _process_daily_tasks(self, today: date):
         """Process today's tasks."""
         daily_tasks = self.db.get_daily_tasks(today)
@@ -1217,6 +1221,7 @@ class MenuHandler:
             for job_title, company, task_name in incomplete_tasks:
                 print(f"📌 {job_title} @ {company} - {task_name}")
             print("-" * 60)
+
 
     def _process_daily_task(self, task: Tuple, today: date, incomplete_tasks: List) -> bool:
         """Process a single daily task. Returns False if user exits."""
@@ -1292,6 +1297,7 @@ class MenuHandler:
 
         return True
 
+
     def handle_contacts(self):
         """Display all contacts (recruiters and application POCs)."""
         # Get all contacts from applications and recruiters
@@ -1338,6 +1344,7 @@ class MenuHandler:
 
         print(f"\nTotal contacts: {len(contacts)}")
 
+
     def _process_dormant_recruiters(self, today: date):
         """Surface recruiter contacts that have gone quiet for 14+ days."""
         dormant = self.db.get_dormant_recruiters(today)
@@ -1369,6 +1376,7 @@ class MenuHandler:
             else:
                 print("\n⏭️ Skipped.\n")
 
+
     def _schedule_recruiter_call(self, app_id: int):
         """Schedule a call with a recruiter."""
         call_date = Input.get_string("Enter call date (YYYY-MM-DD): ")
@@ -1397,6 +1405,41 @@ class MenuHandler:
         )
         self.db.conn.commit()
         print("\n✅ Recruiter call scheduled! It'll show up in your tasks that day.")
+
+    def _mark_resume_sent(self, app_id: int):
+        """Confirm the resume has been sent for this entry."""
+        self.db.cursor.execute(
+            """SELECT resume_sent, resume_sent_date, recruiter_name, company
+               FROM application_tracking WHERE id = %s""",
+            (app_id,)
+        )
+        row = self.db.cursor.fetchone()
+        if not row:
+            print("\n❌ Entry not found.")
+            return
+
+        already_sent, sent_date, recruiter_name, company = row
+        who = recruiter_name or company or "this contact"
+
+        if already_sent:
+            sent_str = sent_date.strftime('%B %d, %Y') if sent_date else "an unknown date"
+            print(f"\n📄 Resume already marked as sent to {who} on {sent_str}.")
+            response = Input.get_yes_no_exit("Update the sent date to today? (Y/N/X): ")
+            if response != 'Y':
+                print("\n⏭️ No changes made.")
+                return
+        else:
+            print(f"\n📄 Resume has NOT been sent to {who} yet.")
+            response = Input.get_yes_no_exit("Mark it as sent now? (Y/N/X): ")
+            if response != 'Y':
+                print("\n⏭️ No changes made.")
+                return
+
+        if self.db.mark_resume_sent(app_id):
+            print("\n✅ Resume marked as sent. Any pending 'Send Resume' task is cleared.")
+        else:
+            print("\n❌ Could not update that entry.")
+
 
     def handle_enter(self):
         """Handle ENTER menu option - add new application or recruiter contact."""
@@ -1556,8 +1599,9 @@ class MenuHandler:
         print("6. Delete Entry")
         print("7. Job/role info (title & hiring company)")
         print("8. Schedule a recruiter call")
+        print("9. Confirm resume sent")
 
-        choice = Input.get_number("\nField to update (1-8, or X to exit): ", 1, 8)
+        choice = Input.get_number("\nField to update (1-9, or X to exit): ", 1, 9)
         if choice is None:
             Display.exit_to_menu()
             return
@@ -1578,6 +1622,8 @@ class MenuHandler:
             self._update_job_info(app_id)
         elif choice == 8:
             self._schedule_recruiter_call(app_id)
+        elif choice == 9:
+            self._mark_resume_sent(app_id)
 
 
     def _update_status(self, app_id: int):
