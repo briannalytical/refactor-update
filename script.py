@@ -179,6 +179,22 @@ def initialize_database(cursor, conn):
         $$ LANGUAGE plpgsql;
     """)
 
+    def mark_resume_sent(self, app_id: int) -> bool:
+        """Mark the resume as sent and clear any pending send-resume task."""
+        self.cursor.execute(
+            """UPDATE application_tracking
+               SET resume_sent = TRUE,
+                   resume_sent_date = CURRENT_DATE,
+                   next_action = CASE WHEN next_action = 'send_resume'
+                                      THEN NULL ELSE next_action END,
+                   next_follow_up_date = CASE WHEN next_action = 'send_resume'
+                                              THEN NULL ELSE next_follow_up_date END
+               WHERE id = %s""",
+            (app_id,)
+        )
+        self.conn.commit()
+        return self.cursor.rowcount > 0
+
     # Create trigger if it doesn't exist
     cursor.execute("""
         DO $$ BEGIN
@@ -538,7 +554,6 @@ class ApplicationDB:
         self.cursor = cursor
         self.conn = conn
 
-
     def update_status(self, app_id: int, next_action: Optional[str]) -> Optional[str]:
         """Auto-update application status based on next action."""
         if next_action and next_action in AUTO_STATUS_MAP:
@@ -550,7 +565,6 @@ class ApplicationDB:
             self.conn.commit()
             return new_status
         return None
-
 
     def clear_completed_task_dates(self, app_id: int, today: date):
         """Clear date fields that triggered a completed task, leaving future dates intact."""
@@ -576,7 +590,6 @@ class ApplicationDB:
         )
         self.conn.commit()
 
-
     def manual_status_update(self, app_id: int) -> Optional[str]:
         """Prompt user to manually update application status."""
         print("\n📌 Select new status:")
@@ -596,7 +609,6 @@ class ApplicationDB:
         self.conn.commit()
         return new_status
 
-
     def update_contact_info(self, app_id: int, contact_name: str, contact_details: str):
         """Update contact information for an application."""
         self.cursor.execute(
@@ -606,7 +618,6 @@ class ApplicationDB:
             (contact_name or None, contact_details or None, app_id)
         )
         self.conn.commit()
-
 
     def update_job_info(self, app_id: int, job_title: Optional[str],
                         company: Optional[str]):
@@ -622,7 +633,6 @@ class ApplicationDB:
         )
         self.conn.commit()
 
-
     def get_all_applications(self, active_only: bool = False) -> List[Tuple]:
         """Retrieve all applications."""
         query = """
@@ -637,7 +647,6 @@ class ApplicationDB:
         self.cursor.execute(query)
         return self.cursor.fetchall()
 
-
     def get_application_by_id(self, app_id: int) -> Optional[Tuple]:
         """Get a specific application by ID."""
         self.cursor.execute(
@@ -645,7 +654,6 @@ class ApplicationDB:
             (app_id,)
         )
         return self.cursor.fetchone()
-
 
     def get_backlog_tasks(self, today: date) -> List[Tuple]:
         """Get overdue tasks."""
@@ -665,7 +673,6 @@ class ApplicationDB:
         self.cursor.execute(query, (today, today, today, today, today))
         return self.cursor.fetchall()
 
-
     def get_daily_tasks(self, today: date) -> List[Tuple]:
         """Get tasks due today."""
         query = """
@@ -684,7 +691,6 @@ class ApplicationDB:
         self.cursor.execute(query, (today, today, today, today, today))
         return self.cursor.fetchall()
 
-
     def add_application(self, job_title: str, company: str, software: Optional[str],
                         notes: Optional[str], contact_name: Optional[str],
                         contact_details: Optional[str], is_priority: bool):
@@ -697,7 +703,6 @@ class ApplicationDB:
             (job_title, company, software, notes, contact_name, contact_details, is_priority)
         )
         self.conn.commit()
-
 
     def add_recruiter_contact(self, recruiter_name: str, recruiting_company: str,
                               contact_details: Optional[str], initial_call_date: str,
@@ -726,7 +731,6 @@ class ApplicationDB:
         )
         self.conn.commit()
 
-
     def get_dormant_recruiters(self, today: date) -> List[Tuple]:
         """Get recruiter contacts with no job attached and no activity in 14+ days."""
         query = """
@@ -743,7 +747,6 @@ class ApplicationDB:
         self.cursor.execute(query, (today,))
         return self.cursor.fetchall()
 
-
     def touch_recruiter(self, app_id: int):
         """Reset the dormancy clock on a recruiter contact."""
         self.cursor.execute(
@@ -752,12 +755,26 @@ class ApplicationDB:
         )
         self.conn.commit()
 
+    def mark_resume_sent(self, app_id: int) -> bool:
+        """Mark the resume as sent and clear any pending send-resume task."""
+        self.cursor.execute(
+            """UPDATE application_tracking
+               SET resume_sent = TRUE,
+                   resume_sent_date = CURRENT_DATE,
+                   next_action = CASE WHEN next_action = 'send_resume'
+                                      THEN NULL ELSE next_action END,
+                   next_follow_up_date = CASE WHEN next_action = 'send_resume'
+                                              THEN NULL ELSE next_follow_up_date END
+               WHERE id = %s""",
+            (app_id,)
+        )
+        self.conn.commit()
+        return self.cursor.rowcount > 0
 
     def delete_application(self, app_id: int):
         """Delete an application."""
         self.cursor.execute("DELETE FROM application_tracking WHERE id = %s", (app_id,))
         self.conn.commit()
-
 
     def update_interview(self, app_id: int, interview_date: str, interview_time: Optional[str],
                          interviewer_name: str, prep_notes: Optional[str]) -> Optional[str]:
@@ -798,7 +815,6 @@ class ApplicationDB:
         self.conn.commit()
         return new_status
 
-
     def update_notes(self, app_id: int, new_notes: str, append: bool = True):
         """Update or append notes."""
         if append:
@@ -815,7 +831,6 @@ class ApplicationDB:
         )
         self.conn.commit()
 
-
     def update_priority(self, app_id: int, is_priority: bool):
         """Update priority status."""
         self.cursor.execute(
@@ -823,22 +838,6 @@ class ApplicationDB:
             (is_priority, app_id)
         )
         self.conn.commit()
-
-        def mark_resume_sent(self, app_id: int) -> bool:
-            """Mark the resume as sent and clear any pending send-resume task."""
-            self.cursor.execute(
-                """UPDATE application_tracking
-                   SET resume_sent = TRUE,
-                       resume_sent_date = CURRENT_DATE,
-                       next_action = CASE WHEN next_action = 'send_resume'
-                                          THEN NULL ELSE next_action END,
-                       next_follow_up_date = CASE WHEN next_action = 'send_resume'
-                                                  THEN NULL ELSE next_follow_up_date END
-                   WHERE id = %s""",
-                (app_id,)
-            )
-            self.conn.commit()
-            return self.cursor.rowcount > 0
 
 
 # BUSINESS LOGIC #
