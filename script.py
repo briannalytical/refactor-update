@@ -696,17 +696,26 @@ class ApplicationDB:
                               contact_details: Optional[str], initial_call_date: str,
                               initial_call_time: Optional[str], notes: Optional[str],
                               is_priority: bool, job_title: Optional[str] = None,
-                              hiring_company: Optional[str] = None):
-        """Add a new recruiter contact entry, optionally with a specific job."""
+                              hiring_company: Optional[str] = None,
+                              resume_sent: bool = False):
+        """Add a new recruiter contact entry, optionally with a specific job.
+
+        If the resume hasn't been sent yet, queues it as a task for today."""
+        resume_sent_date = date.today() if resume_sent else None
+        next_action = None if resume_sent else 'send_resume'
+        next_follow_up = None if resume_sent else date.today()
+
         self.cursor.execute(
             """INSERT INTO application_tracking 
                (source_type, recruiter_name, recruiting_company, follow_up_contact_details,
                 initial_call_date, initial_call_time, job_notes, is_priority,
-                application_status, date_applied, job_title, company)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                application_status, date_applied, job_title, company,
+                resume_sent, resume_sent_date, next_action, next_follow_up_date)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
             ('recruiter', recruiter_name, recruiting_company, contact_details,
              initial_call_date, initial_call_time, notes, is_priority, 'applied', None,
-             job_title, hiring_company)
+             job_title, hiring_company, resume_sent, resume_sent_date,
+             next_action, next_follow_up)
         )
         self.conn.commit()
 
