@@ -1,14 +1,10 @@
 import sys
-import os
 import psycopg2
 from datetime import date, datetime
 from typing import Optional, Tuple, List, Dict, Any
 import os
-from dotenv import load_dotenv
 from psycopg2.extensions import cursor as PgCursor, connection as PgConnection
 from dotenv import load_dotenv
-
-load_dotenv()
 
 load_dotenv()
 
