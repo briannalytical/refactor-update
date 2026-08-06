@@ -1472,6 +1472,9 @@ class MenuHandler:
 
         notes = Input.get_string("Any notes about the conversation? (optional): ")
 
+        # Resume status — recruiters almost always want one
+        resume_sent = Input.get_yes_no("Have you sent them your resume yet? (Y/N): ") == 'Y'
+
         # Optional: specific job this recruiter reached out about
         job_title = None
         hiring_company = None
@@ -1485,11 +1488,16 @@ class MenuHandler:
         self.db.add_recruiter_contact(
             recruiter_name, recruiting_company, contact_details,
             initial_call_date, initial_call_time, notes, is_priority,
-            job_title, hiring_company
+            job_title, hiring_company, resume_sent
         )
 
         print("\n✅ Recruiter contact added!")
+        if resume_sent:
+            print("📄 Resume marked as sent.")
+        else:
+            print("📄 I've added 'Send Resume' to today's tasks — check TASKS when you're ready.")
         print("💡 Tip: You can add or edit the job later via the UPDATE menu.")
+
 
     def handle_update(self):
         """Handle UPDATE menu option."""
@@ -1540,6 +1548,7 @@ class MenuHandler:
 
         self._handle_update_menu(app_id)
 
+
     def _handle_update_menu(self, app_id: int):
         """Handle the update submenu."""
         print("\nWhat do you want to update?")
@@ -1574,6 +1583,7 @@ class MenuHandler:
         elif choice == 8:
             self._schedule_recruiter_call(app_id)
 
+
     def _update_status(self, app_id: int):
         """Update application status."""
         new_status = self.db.manual_status_update(app_id)
@@ -1581,6 +1591,7 @@ class MenuHandler:
             print(f"\n✅ Status updated to: {Display.format_status(new_status)}")
         else:
             print("\n⏭️ Status update cancelled.")
+
 
     def _update_contact(self, app_id: int):
         """Update contact information."""
@@ -1592,6 +1603,7 @@ class MenuHandler:
             return
         self.db.update_contact_info(app_id, contact_name, contact_details)
         print("\n✅ Follow-up contact updated.")
+
 
     def _update_interview(self, app_id: int):
         """Update interview details."""
@@ -1609,6 +1621,7 @@ class MenuHandler:
         print("\n✅ Interview details updated.")
         if new_status:
             print(f"✅ Status updated to: {Display.format_status(new_status)}")
+
 
     def _update_job_info(self, app_id: int):
         """Update job title and/or hiring company (e.g., recruiter pitched a role)."""
@@ -1645,6 +1658,7 @@ class MenuHandler:
             print("💡 This recruiter contact now has a role attached — it'll flow through "
                   "the normal application workflow (interviews, statuses, tasks).")
 
+
     def _update_notes(self, app_id: int):
         """Update notes."""
         self.db.cursor.execute("SELECT job_notes FROM application_tracking WHERE id = %s", (app_id,))
@@ -1664,6 +1678,7 @@ class MenuHandler:
         self.db.update_notes(app_id, new_notes, append=True)
         print("\n✅ Notes updated.")
 
+
     def _update_priority(self, app_id: int):
         """Update priority status."""
         response = Input.get_yes_no_exit("Mark as priority? (Y/N/X): ")
@@ -1678,6 +1693,7 @@ class MenuHandler:
             print("\n✅ Application marked as priority.")
         else:
             print("\n✅ Priority removed from application.")
+
 
     def _delete_application(self, app_id: int):
         """Delete an application."""
@@ -1714,6 +1730,7 @@ class MenuHandler:
                 break
             else:
                 print("\n❌ Please type 'DELETE' exactly to confirm, or 'X'/'N' to cancel")
+
 
     @staticmethod
     def handle_tips():
