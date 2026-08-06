@@ -278,8 +278,9 @@ STATUS_OPTIONS = {
 LINKEDIN_TEMPLATES = {
     'default': (
         "Hi {contact_name}, I recently applied for the {job_title} role at {company} "
-        "and would love to connect. I'm really interested in the work your team is "
-        "doing and would welcome the chance to learn more."
+        "and would love to connect. I'm really interested in the role and the work your team is "
+        "doing and would welcome the chance to learn more. I'd love to stay connected should any "
+        "similar roles come up in the future. Thank you!"
     ),
     'check_application_status': (
         "Hi {contact_name}, I applied for the {job_title} role at {company} recently "
@@ -298,7 +299,7 @@ LINKEDIN_TEMPLATES = {
     'send_thank_you_email': (
         "Hi {contact_name}, thank you again for taking the time to speak with me about "
         "the {job_title} role. I really enjoyed the conversation and am excited about "
-        "the opportunity — looking forward to staying in touch."
+        "the opportunity and the potential to move forward — looking forward to staying in touch."
     ),
 }
 
@@ -310,20 +311,21 @@ EMAIL_TEMPLATES = {
             "I hope you're doing well. I recently applied for the {job_title} position "
             "at {company} and wanted to follow up directly to express my continued "
             "interest.\n\n"
-            "I'd be glad to share more about my background or answer any questions. "
+            "I'd be glad to share more about my background or answer any questions you may\n\n"
+            "have about my experience or any items on my resume.\n\n"
             "Thank you for your time, and I look forward to hearing from you.\n\n"
-            "Best regards"
+            "Best,"
         ),
     },
     'check_application_status': {
         'subject': "Checking in — {job_title} application",
         'body': (
             "Hi {contact_name},\n\n"
-            "I applied for the {job_title} role at {company} recently and wanted to "
+            "I recently applied for the {job_title} role at {company} recently and wanted to "
             "check in on the status of my application.\n\n"
             "I'm very interested in the position and would be happy to provide any "
-            "additional information that would be helpful. Thank you for your time.\n\n"
-            "Best regards"
+            "additional information that would be helpful to you as you review my qualifications. Thank you for your time.\n\n"
+            "Best,"
         ),
     },
     'follow_up_with_contact': {
@@ -334,7 +336,7 @@ EMAIL_TEMPLATES = {
             "introduce myself directly.\n\n"
             "I'd welcome the chance to learn more about the team and share why I think "
             "I'd be a strong fit. Thank you for your time.\n\n"
-            "Best regards"
+            "Best,"
         ),
     },
     'send_thank_you_email': {
@@ -345,8 +347,8 @@ EMAIL_TEMPLATES = {
             "at {company}. I really enjoyed our conversation and came away even more "
             "excited about the opportunity.\n\n"
             "Please don't hesitate to reach out if there's anything else you need from "
-            "me. I look forward to next steps.\n\n"
-            "Best regards"
+            "me, or if you have any additional questions about my experience or resume. I eagerly look forward to next steps.\n\n"
+            "Best,"
         ),
     },
     'send_thank_you_email_second_interview': {
@@ -354,11 +356,11 @@ EMAIL_TEMPLATES = {
         'body': (
             "Hi {contact_name},\n\n"
             "Thank you again for the time today discussing the {job_title} role at "
-            "{company}. The conversation gave me a much clearer picture of the team's "
-            "priorities, and I'm even more enthusiastic about contributing.\n\n"
-            "Happy to provide anything else that would be useful as you decide on next "
+            "{company}. This conversation gave me a much clearer picture of the team's "
+            "priorities, where I may fit in, and I'm even more enthusiastic about becoming a contributing member of the team.\n\n"
+            "I'm happy to provide anything else that would be useful as you decide on next "
             "steps.\n\n"
-            "Best regards"
+            "Best,"
         ),
     },
 }
