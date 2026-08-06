@@ -542,6 +542,7 @@ class ApplicationDB:
         self.cursor = cursor
         self.conn = conn
 
+
     def update_status(self, app_id: int, next_action: Optional[str]) -> Optional[str]:
         """Auto-update application status based on next action."""
         if next_action and next_action in AUTO_STATUS_MAP:
@@ -553,6 +554,7 @@ class ApplicationDB:
             self.conn.commit()
             return new_status
         return None
+
 
     def clear_completed_task_dates(self, app_id: int, today: date):
         """Clear date fields that triggered a completed task, leaving future dates intact."""
@@ -578,6 +580,7 @@ class ApplicationDB:
         )
         self.conn.commit()
 
+
     def manual_status_update(self, app_id: int) -> Optional[str]:
         """Prompt user to manually update application status."""
         print("\n📌 Select new status:")
@@ -597,6 +600,7 @@ class ApplicationDB:
         self.conn.commit()
         return new_status
 
+
     def update_contact_info(self, app_id: int, contact_name: str, contact_details: str):
         """Update contact information for an application."""
         self.cursor.execute(
@@ -606,6 +610,7 @@ class ApplicationDB:
             (contact_name or None, contact_details or None, app_id)
         )
         self.conn.commit()
+
 
     def update_job_info(self, app_id: int, job_title: Optional[str],
                         company: Optional[str]):
@@ -620,6 +625,7 @@ class ApplicationDB:
             (job_title, company, app_id)
         )
         self.conn.commit()
+
 
     def get_all_applications(self, active_only: bool = False) -> List[Tuple]:
         """Retrieve all applications."""
@@ -643,6 +649,7 @@ class ApplicationDB:
         )
         return self.cursor.fetchone()
 
+
     def get_backlog_tasks(self, today: date) -> List[Tuple]:
         """Get overdue tasks."""
         query = """
@@ -660,6 +667,7 @@ class ApplicationDB:
         """
         self.cursor.execute(query, (today, today, today, today, today))
         return self.cursor.fetchall()
+
 
     def get_daily_tasks(self, today: date) -> List[Tuple]:
         """Get tasks due today."""
@@ -679,6 +687,7 @@ class ApplicationDB:
         self.cursor.execute(query, (today, today, today, today, today))
         return self.cursor.fetchall()
 
+
     def add_application(self, job_title: str, company: str, software: Optional[str],
                         notes: Optional[str], contact_name: Optional[str],
                         contact_details: Optional[str], is_priority: bool):
@@ -691,6 +700,7 @@ class ApplicationDB:
             (job_title, company, software, notes, contact_name, contact_details, is_priority)
         )
         self.conn.commit()
+
 
     def add_recruiter_contact(self, recruiter_name: str, recruiting_company: str,
                               contact_details: Optional[str], initial_call_date: str,
@@ -718,6 +728,7 @@ class ApplicationDB:
              next_action, next_follow_up)
         )
         self.conn.commit()
+
 
     def get_dormant_recruiters(self, today: date) -> List[Tuple]:
         """Get recruiter contacts with no job attached and no activity in 14+ days."""
