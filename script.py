@@ -44,22 +44,23 @@ def initialize_database(cursor, conn):
     """)
 
     cursor.execute("""
-        DO $$ BEGIN
-            CREATE TYPE next_action_enum AS ENUM (
-                'check_application_status',
-                'follow_up_with_contact',
-                'send_follow_up_email',
-                'prepare_for_interview',
-                'send_thank_you_email',
-                'prepare_for_second_interview',
-                'send_thank_you_email_second_interview',
-                'prepare_for_final_interview',
-                'send_thank_you_email_final_interview'
-            );
-        EXCEPTION
-            WHEN duplicate_object THEN null;
-        END $$;
-    """)
+            DO $$ BEGIN
+                CREATE TYPE next_action_enum AS ENUM (
+                    'check_application_status',
+                    'follow_up_with_contact',
+                    'send_resume',
+                    'send_follow_up_email',
+                    'prepare_for_interview',
+                    'send_thank_you_email',
+                    'prepare_for_second_interview',
+                    'send_thank_you_email_second_interview',
+                    'prepare_for_final_interview',
+                    'send_thank_you_email_final_interview'
+                );
+            EXCEPTION
+                WHEN duplicate_object THEN null;
+            END $$;
+        """)
 
     # Create the main table if it doesn't exist
     cursor.execute("""
