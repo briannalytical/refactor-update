@@ -1,18 +1,16 @@
 import sys
+import os
 import psycopg2
 from datetime import date, datetime
 from typing import Optional, Tuple, List, Dict, Any
 from psycopg2.extensions import cursor as PgCursor, connection as PgConnection
-import os
 from dotenv import load_dotenv
 
+load_dotenv()
 
 
 ### DATABASE SCHEMA INITIALIZATION ###
 ### ============================== ###
-
-load_dotenv()
-print("DB URL:", os.getenv("DATABASE_URL"))
 
 def initialize_database(cursor, conn):
     """Initialize database schema if it doesn't exist."""
@@ -86,6 +84,7 @@ def initialize_database(cursor, conn):
             initial_call_time TIME,
             resume_sent BOOLEAN DEFAULT FALSE,
             resume_sent_date DATE,
+            employment_type VARCHAR(50),
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
@@ -113,27 +112,18 @@ def initialize_database(cursor, conn):
             ADD COLUMN IF NOT EXISTS initial_call_time TIME,
             ADD COLUMN IF NOT EXISTS resume_sent BOOLEAN DEFAULT FALSE,
             ADD COLUMN IF NOT EXISTS resume_sent_date DATE,
+            ADD COLUMN IF NOT EXISTS employment_type VARCHAR(50),
             ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
     """)
 
-    # Create function to automatically set follow-up dates on new applications
+    # Also make sure job_title/company are nullable — recruiter contacts
+    # exist before there's a specific role attached.
     cursor.execute("""
-            CREATE OR REPLACE FUNCTION set_check_application_status()
-            RETURNS TRIGGER AS $$
-            BEGIN
-                IF NEW.application_status = 'applied'
-                   AND NEW.job_title IS NOT NULL
-                   AND NEW.date_applied IS NOT NULL THEN
-                    -- Check status: 2 business days after applying
-                    NEW.check_application_status := add_business_days(NEW.date_applied, 2);
-                    -- Follow up: 3 business days after applying
-                    NEW.next_follow_up_date := add_business_days(NEW.date_applied, 3);
-                END IF;
-                RETURN NEW;
-            END;
-            $$ LANGUAGE plpgsql;
-        """)
+        ALTER TABLE application_tracking
+            ALTER COLUMN job_title DROP NOT NULL,
+            ALTER COLUMN company DROP NOT NULL;
+    """)
 
     # Helper function: add N business days to a date (skips Sat/Sun)
     cursor.execute("""
@@ -143,6 +133,10 @@ def initialize_database(cursor, conn):
             result_date DATE := start_date;
             days_added INTEGER := 0;
         BEGIN
+            -- NULL-safe guard: without this, a NULL start_date loops forever
+            IF start_date IS NULL OR num_days IS NULL THEN
+                RETURN NULL;
+            END IF;
             WHILE days_added < num_days LOOP
                 result_date := result_date + 1;
                 -- DOW: 0 = Sunday, 6 = Saturday
@@ -160,7 +154,9 @@ def initialize_database(cursor, conn):
         CREATE OR REPLACE FUNCTION set_check_application_status()
         RETURNS TRIGGER AS $$
         BEGIN
-            IF NEW.application_status = 'applied' AND NEW.job_title IS NOT NULL THEN
+            IF NEW.application_status = 'applied'
+               AND NEW.job_title IS NOT NULL
+               AND NEW.date_applied IS NOT NULL THEN
                 -- Check status: 2 business days after applying
                 NEW.check_application_status := add_business_days(NEW.date_applied, 2);
                 -- Follow up: 3 business days after applying
@@ -217,33 +213,8 @@ def initialize_database(cursor, conn):
                OR date_applied IS NOT NULL);
     """)
 
-    # Helper function: add N business days to a date (skips Sat/Sun)
-    cursor.execute("""
-        CREATE OR REPLACE FUNCTION add_business_days(start_date DATE, num_days INTEGER)
-        RETURNS DATE AS $$
-        DECLARE
-            result_date DATE := start_date;
-            days_added INTEGER := 0;
-        BEGIN
-            -- NULL-safe guard: without this, a NULL start_date loops forever
-            IF start_date IS NULL OR num_days IS NULL THEN
-                RETURN NULL;
-            END IF;
-            WHILE days_added < num_days LOOP
-                result_date := result_date + 1;
-                -- DOW: 0 = Sunday, 6 = Saturday
-                IF EXTRACT(DOW FROM result_date) NOT IN (0, 6) THEN
-                    days_added := days_added + 1;
-                END IF;
-            END LOOP;
-            RETURN result_date;
-        END;
-        $$ LANGUAGE plpgsql;
-    """)
-
     conn.commit()
     print("✅ Database schema initialized successfully!")
-
 
 
 # CONFIGURATION & CONSTANTS #
@@ -295,6 +266,98 @@ STATUS_OPTIONS = {
 }
 
 
+# MESSAGE TEMPLATES #
+# ================= #
+# Keyed by next_action. Anything without its own entry falls back to 'default'.
+LINKEDIN_TEMPLATES = {
+    'default': (
+        "Hi {contact_name}, I recently applied for the {job_title} role at {company} "
+        "and would love to connect. I'm really interested in the work your team is "
+        "doing and would welcome the chance to learn more."
+    ),
+    'check_application_status': (
+        "Hi {contact_name}, I applied for the {job_title} role at {company} recently "
+        "and wanted to reach out directly. I'd love to connect and hear more about "
+        "the team if you have a moment."
+    ),
+    'follow_up_with_contact': (
+        "Hi {contact_name}, I applied for the {job_title} role at {company} recently "
+        "and wanted to reach out directly. I'd love to connect and hear more about "
+        "the team if you have a moment."
+    ),
+    'send_follow_up_email': (
+        "Hi {contact_name}, following up on my application for the {job_title} role "
+        "at {company}. I'm still very interested and would love to connect."
+    ),
+    'send_thank_you_email': (
+        "Hi {contact_name}, thank you again for taking the time to speak with me about "
+        "the {job_title} role. I really enjoyed the conversation and am excited about "
+        "the opportunity — looking forward to staying in touch."
+    ),
+}
+
+EMAIL_TEMPLATES = {
+    'default': {
+        'subject': "Following up — {job_title} application",
+        'body': (
+            "Hi {contact_name},\n\n"
+            "I hope you're doing well. I recently applied for the {job_title} position "
+            "at {company} and wanted to follow up directly to express my continued "
+            "interest.\n\n"
+            "I'd be glad to share more about my background or answer any questions. "
+            "Thank you for your time, and I look forward to hearing from you.\n\n"
+            "Best regards"
+        ),
+    },
+    'check_application_status': {
+        'subject': "Checking in — {job_title} application",
+        'body': (
+            "Hi {contact_name},\n\n"
+            "I applied for the {job_title} role at {company} recently and wanted to "
+            "check in on the status of my application.\n\n"
+            "I'm very interested in the position and would be happy to provide any "
+            "additional information that would be helpful. Thank you for your time.\n\n"
+            "Best regards"
+        ),
+    },
+    'follow_up_with_contact': {
+        'subject': "Following up — {job_title} at {company}",
+        'body': (
+            "Hi {contact_name},\n\n"
+            "I recently applied for the {job_title} role at {company} and wanted to "
+            "introduce myself directly.\n\n"
+            "I'd welcome the chance to learn more about the team and share why I think "
+            "I'd be a strong fit. Thank you for your time.\n\n"
+            "Best regards"
+        ),
+    },
+    'send_thank_you_email': {
+        'subject': "Thank you — {job_title} interview",
+        'body': (
+            "Hi {contact_name},\n\n"
+            "Thank you for taking the time to speak with me about the {job_title} role "
+            "at {company}. I really enjoyed our conversation and came away even more "
+            "excited about the opportunity.\n\n"
+            "Please don't hesitate to reach out if there's anything else you need from "
+            "me. I look forward to next steps.\n\n"
+            "Best regards"
+        ),
+    },
+    'send_thank_you_email_second_interview': {
+        'subject': "Thank you — {job_title} follow-up interview",
+        'body': (
+            "Hi {contact_name},\n\n"
+            "Thank you again for the time today discussing the {job_title} role at "
+            "{company}. The conversation gave me a much clearer picture of the team's "
+            "priorities, and I'm even more enthusiastic about contributing.\n\n"
+            "Happy to provide anything else that would be useful as you decide on next "
+            "steps.\n\n"
+            "Best regards"
+        ),
+    },
+}
+
+
 # DATABASE CONNECTION #
 # =================== #
 class DatabaseConnection:
@@ -330,7 +393,6 @@ class DatabaseConnection:
             self.conn.close()
 
 
-
 # DISPLAY UTILITIES #
 # ================= #
 class Display:
@@ -344,7 +406,6 @@ class Display:
             "You can use this tool to track applications, remind you when to follow up, and schedule your interviews!")
         print("You can press X + enter at any point to return to the main menu!")
 
-
     @staticmethod
     def main_menu():
         print("\nWhat would you like to do? Enter your choice below:")
@@ -356,41 +417,33 @@ class Display:
         print("TIPS: Some helpful tips to keep in mind as you apply")
         print("BYE: End your session")
 
-
     @staticmethod
     def invalid_number():
         print("\n😭 Invalid number selection. Please select from available options.")
-
 
     @staticmethod
     def invalid_letter():
         print("\n😭 This character does not exist in this context. Try choosing from the available options.")
 
-
     @staticmethod
     def invalid_yes_no():
         print("\n😭 Please select Y or N.")
-
 
     @staticmethod
     def exit_to_menu():
         print("\n🔙 Returning to main menu.")
 
-
     @staticmethod
     def deletion_cancelled():
         print("\n❌ Deletion has been cancelled.")
-
 
     @staticmethod
     def format_status(status: str) -> str:
         return STATUS_DISPLAY_MAP.get(status, status.replace('_', ' ').title())
 
-
     @staticmethod
     def format_priority(is_priority: bool) -> str:
         return "‼️ Priority" if is_priority else ""
-
 
     @staticmethod
     def format_datetime(val: Any) -> str:
@@ -415,7 +468,6 @@ class Input:
                 return response
             Display.invalid_yes_no()
 
-
     @staticmethod
     def get_yes_no(prompt: str) -> str:
         """Get Y/N input with validation."""
@@ -424,7 +476,6 @@ class Input:
             if response in ['Y', 'N']:
                 return response
             Display.invalid_yes_no()
-
 
     @staticmethod
     def get_number(prompt: str, min_val: int, max_val: int, allow_exit: bool = True) -> Optional[int]:
@@ -441,7 +492,6 @@ class Input:
             except ValueError:
                 Display.invalid_number()
 
-
     @staticmethod
     def get_string(prompt: str, allow_empty: bool = True) -> Optional[str]:
         """Get string input."""
@@ -451,7 +501,6 @@ class Input:
         if not allow_empty and not value:
             return Input.get_string(prompt, allow_empty)
         return value if value else None
-
 
     @staticmethod
     def get_choice(prompt: str, options: List[str]) -> Optional[str]:
@@ -466,7 +515,6 @@ class Input:
             Display.invalid_letter()
 
 
-
 # DATABASE OPERATIONS #
 # =================== #
 class ApplicationDB:
@@ -475,7 +523,6 @@ class ApplicationDB:
     def __init__(self, cursor: PgCursor, conn: PgConnection):
         self.cursor = cursor
         self.conn = conn
-
 
     def update_status(self, app_id: int, next_action: Optional[str]) -> Optional[str]:
         """Auto-update application status based on next action."""
@@ -488,7 +535,6 @@ class ApplicationDB:
             self.conn.commit()
             return new_status
         return None
-
 
     def clear_completed_task_dates(self, app_id: int, today: date):
         """Clear date fields that triggered a completed task, leaving future dates intact."""
@@ -514,7 +560,6 @@ class ApplicationDB:
         )
         self.conn.commit()
 
-
     def manual_status_update(self, app_id: int) -> Optional[str]:
         """Prompt user to manually update application status."""
         print("\n📌 Select new status:")
@@ -534,7 +579,6 @@ class ApplicationDB:
         self.conn.commit()
         return new_status
 
-
     def update_contact_info(self, app_id: int, contact_name: str, contact_details: str):
         """Update contact information for an application."""
         self.cursor.execute(
@@ -544,7 +588,6 @@ class ApplicationDB:
             (contact_name or None, contact_details or None, app_id)
         )
         self.conn.commit()
-
 
     def update_job_info(self, app_id: int, job_title: Optional[str],
                         company: Optional[str]):
@@ -560,7 +603,6 @@ class ApplicationDB:
         )
         self.conn.commit()
 
-
     def get_all_applications(self, active_only: bool = False) -> List[Tuple]:
         """Retrieve all applications."""
         query = """
@@ -575,7 +617,6 @@ class ApplicationDB:
         self.cursor.execute(query)
         return self.cursor.fetchall()
 
-
     def get_application_by_id(self, app_id: int) -> Optional[Tuple]:
         """Get a specific application by ID."""
         self.cursor.execute(
@@ -583,7 +624,6 @@ class ApplicationDB:
             (app_id,)
         )
         return self.cursor.fetchone()
-
 
     def get_backlog_tasks(self, today: date) -> List[Tuple]:
         """Get overdue tasks."""
@@ -603,7 +643,6 @@ class ApplicationDB:
         self.cursor.execute(query, (today, today, today, today, today))
         return self.cursor.fetchall()
 
-
     def get_daily_tasks(self, today: date) -> List[Tuple]:
         """Get tasks due today."""
         query = """
@@ -621,7 +660,6 @@ class ApplicationDB:
         """
         self.cursor.execute(query, (today, today, today, today, today))
         return self.cursor.fetchall()
-
 
     def add_application(self, job_title: str, company: str, software: Optional[str],
                         notes: Optional[str], contact_name: Optional[str],
@@ -670,7 +708,6 @@ class ApplicationDB:
         self.cursor.execute(query, (today,))
         return self.cursor.fetchall()
 
-
     def touch_recruiter(self, app_id: int):
         """Reset the dormancy clock on a recruiter contact."""
         self.cursor.execute(
@@ -678,7 +715,6 @@ class ApplicationDB:
             (app_id,)
         )
         self.conn.commit()
-
 
     def delete_application(self, app_id: int):
         """Delete an application."""
@@ -724,7 +760,6 @@ class ApplicationDB:
         self.conn.commit()
         return new_status
 
-
     def update_notes(self, app_id: int, new_notes: str, append: bool = True):
         """Update or append notes."""
         if append:
@@ -741,7 +776,6 @@ class ApplicationDB:
         )
         self.conn.commit()
 
-
     def update_priority(self, app_id: int, is_priority: bool):
         """Update priority status."""
         self.cursor.execute(
@@ -749,7 +783,6 @@ class ApplicationDB:
             (is_priority, app_id)
         )
         self.conn.commit()
-
 
 
 # BUSINESS LOGIC #
@@ -785,12 +818,65 @@ class ContactManager:
         return True
 
 
+class MessageDrafter:
+    """Generates copy-paste-ready outreach messages from task context."""
+
+    @staticmethod
+    def _safe_fields(contact_name: Optional[str], job_title: Optional[str],
+                     company: Optional[str]) -> Dict[str, str]:
+        """Fill in graceful fallbacks so templates never print 'None'."""
+        return {
+            'contact_name': contact_name or "there",
+            'job_title': job_title or "the role we discussed",
+            'company': company or "your team",
+        }
+
+    @staticmethod
+    def offer_draft(next_action: Optional[str], contact_name: Optional[str],
+                    job_title: Optional[str], company: Optional[str]) -> bool:
+        """Offer a drafted message. Returns False if the user wants to exit."""
+        response = Input.get_yes_no_exit("\n✍️  Want a draft message to copy? (Y/N/X): ")
+        if response == 'X':
+            return False
+        if response == 'N':
+            return True
+
+        print("\nWhich format?")
+        print("1. LinkedIn connection note")
+        print("2. Email")
+        choice = Input.get_number("Select (1-2, or X to skip): ", 1, 2)
+        if choice is None:
+            return True
+
+        fields = MessageDrafter._safe_fields(contact_name, job_title, company)
+
+        if choice == 1:
+            template = LINKEDIN_TEMPLATES.get(next_action, LINKEDIN_TEMPLATES['default'])
+            message = template.format(**fields)
+            print("\n📋 Suggested LinkedIn note (copy between the lines):")
+            print("─" * 60)
+            print(message)
+            print("─" * 60)
+            print(f"({len(message)} characters — LinkedIn's limit is 300)")
+        else:
+            template = EMAIL_TEMPLATES.get(next_action, EMAIL_TEMPLATES['default'])
+            print("\n📋 Suggested email (copy between the lines):")
+            print("─" * 60)
+            print(f"Subject: {template['subject'].format(**fields)}")
+            print()
+            print(template['body'].format(**fields))
+            print("─" * 60)
+
+        print("💡 Personalize the opening — mention something specific about the company "
+              "or your conversation. Templates get ignored; tailored notes get replies.\n")
+        return True
+
+
 class TaskProcessor:
     """Processes task completion and status updates."""
 
     def __init__(self, db: ApplicationDB):
         self.db = db
-
 
     def process_task_completion(self, task: Tuple, today: date) -> bool:
         """Process a single task. Returns False if user exits."""
@@ -800,7 +886,9 @@ class TaskProcessor:
 
         # Display task details
         priority_indicator = " ‼️" if is_priority else ""
-        print(f"\n📌 {job_title} @ {company}{priority_indicator}")
+        display_title = job_title if job_title else "Recruiter Contact"
+        display_company = company if company else "TBD"
+        print(f"\n📌 {display_title} @ {display_company}{priority_indicator}")
         print(f"   → Current Status: {Display.format_status(current_status)}")
         if next_action:
             print(f"   → Task: {next_action.replace('_', ' ').title()}")
@@ -812,6 +900,10 @@ class TaskProcessor:
         # Show overdue dates
         self._display_overdue_dates(check_date, follow_up_date, interview_date,
                                     second_interview_date, final_interview_date, today)
+
+        # Offer a draft message before marking complete
+        if not MessageDrafter.offer_draft(next_action, contact_name, job_title, company):
+            return False
 
         # Mark as completed
         response = Input.get_yes_no_exit("✅ Mark this task as completed? (Y/N/X): ")
@@ -842,11 +934,11 @@ class TaskProcessor:
 
         return True
 
-
     @staticmethod
     def _display_overdue_dates(check_date, follow_up_date, interview_date,
                                second_interview_date, final_interview_date, today):
         """Display overdue dates for a task."""
+
         def as_date(val):
             # TIMESTAMP columns arrive as datetime; DATE columns arrive as date
             return val.date() if isinstance(val, datetime) else val
@@ -870,7 +962,6 @@ class TaskProcessor:
         print()
 
 
-
 # MENU HANDLERS #
 # ============= #
 
@@ -881,7 +972,9 @@ def _display_backlog_task(task: Tuple, today: date):
      final_interview_date, is_priority) = task
 
     priority_indicator = " ‼️" if is_priority else ""
-    print(f"📌 {job_title} @ {company} ({app_id}){priority_indicator}")
+    display_title = job_title if job_title else "Recruiter Contact"
+    display_company = company if company else "TBD"
+    print(f"📌 {display_title} @ {display_company} ({app_id}){priority_indicator}")
     if next_action:
         print(f"   → Task: {next_action.replace('_', ' ').title()}")
 
@@ -892,11 +985,9 @@ def _display_backlog_task(task: Tuple, today: date):
 class MenuHandler:
     """Handles all menu operations."""
 
-
     def __init__(self, db: ApplicationDB):
         self.db = db
         self.task_processor = TaskProcessor(db)
-
 
     def handle_view(self):
         """Handle VIEW menu option."""
@@ -925,7 +1016,7 @@ class MenuHandler:
         # View details or update
         while True:
             app_id = Input.get_number("\nEnter an application ID, or press X to exit: ",
-                                          1, 999999)
+                                      1, 999999)
             if app_id is None:
                 Display.exit_to_menu()
                 return
@@ -937,7 +1028,7 @@ class MenuHandler:
                 continue
 
             choice = Input.get_choice("(V)iew details or (U)pdate this application? (V/U, or X): ",
-                                          ['V', 'U'])
+                                      ['V', 'U'])
             if choice is None:
                 Display.exit_to_menu()
                 return
@@ -946,7 +1037,6 @@ class MenuHandler:
                 self._display_application_details(app_id)
             else:
                 self._handle_update_menu(app_id)
-
 
     def _display_application_details(self, app_id: int):
         """Display detailed information for a single application."""
@@ -997,7 +1087,6 @@ class MenuHandler:
         elif response == 'Y':
             self._handle_update_menu(app_id)
 
-
     def handle_tasks(self):
         """Handle TASKS menu option."""
         today = date.today()
@@ -1023,7 +1112,6 @@ class MenuHandler:
         # Process today's tasks
         self._process_daily_tasks(today)
 
-
     def _process_backlog(self, backlog_tasks: List[Tuple], today: date):
         """Process backlog tasks."""
         print(f"\n📋 Backlog - Overdue Tasks")
@@ -1048,7 +1136,6 @@ class MenuHandler:
                     break
             else:
                 Display.invalid_number()
-
 
     def _process_daily_tasks(self, today: date):
         """Process today's tasks."""
@@ -1103,6 +1190,10 @@ class MenuHandler:
         if not ContactManager.prompt_for_contact_info(self.db, app_id, contact_name, contact_details):
             return False
 
+        # Offer a draft message before marking complete
+        if not MessageDrafter.offer_draft(next_action, contact_name, job_title, company):
+            return False
+
         # Task completion
         response = Input.get_yes_no_exit("✅ Mark this task as completed? (Y/N/X): ")
         if response == 'X':
@@ -1120,6 +1211,7 @@ class MenuHandler:
                 print("\n✅ Call completed! Add job details via UPDATE if they pitched a role. 😊\n")
             else:
                 new_status = self.db.update_status(app_id, next_action)
+                self.db.clear_completed_task_dates(app_id, today)
                 if new_status:
                     print(f"\n✅ Status auto-updated to: {Display.format_status(new_status)}\n")
                 else:
@@ -1143,7 +1235,6 @@ class MenuHandler:
                 print("\n⏭️ Skipped status update.\n")
 
         return True
-
 
     def handle_contacts(self):
         """Display all contacts (recruiters and application POCs)."""
@@ -1191,7 +1282,6 @@ class MenuHandler:
 
         print(f"\nTotal contacts: {len(contacts)}")
 
-
     def _process_dormant_recruiters(self, today: date):
         """Surface recruiter contacts that have gone quiet for 14+ days."""
         dormant = self.db.get_dormant_recruiters(today)
@@ -1209,6 +1299,10 @@ class MenuHandler:
             if contact_details:
                 print(f"   → Contact: {contact_details}")
             print(f"   → Last activity: {updated_at.strftime('%B %d, %Y')}")
+
+            # Offer a check-in message draft
+            if not MessageDrafter.offer_draft('follow_up_with_contact', name, None, rec_company):
+                return
 
             response = Input.get_yes_no_exit("\n✅ Mark as followed up? (Y/N/X): ")
             if response == 'X':
@@ -1228,7 +1322,7 @@ class MenuHandler:
         try:
             datetime.strptime(call_date, '%Y-%m-%d')
         except ValueError:
-            print("\n❌ Invalid date format. Please use YYYY-MM-DD (e.g., 2026-07-30)")
+            print("\n❌ Invalid date format. Please use YYYY-MM-DD (e.g., 2026-08-30)")
             return
 
         call_time = Input.get_string("Enter call time (HH:MM, optional): ")
@@ -1248,7 +1342,6 @@ class MenuHandler:
         self.db.conn.commit()
         print("\n✅ Recruiter call scheduled! It'll show up in your tasks that day.")
 
-
     def handle_enter(self):
         """Handle ENTER menu option - add new application or recruiter contact."""
         print("\nWhat would you like to track?")
@@ -1264,7 +1357,6 @@ class MenuHandler:
             self._handle_job_application()
         elif choice == 2:
             self._handle_recruiter_outreach()
-
 
     def _handle_job_application(self):
         """Handle adding a job application (existing flow)."""
@@ -1292,43 +1384,6 @@ class MenuHandler:
         self.db.add_application(job_title, company, software, notes,
                                 contact_name, contact_details, is_priority)
         print("\n✅ Application added! I'll remind you when you have tasks related to this job. 😊")
-
-
-    def _update_job_info(self, app_id: int):
-        """Update job title and/or hiring company (e.g., recruiter pitched a role)."""
-        # Show current values so you know what you're changing
-        self.db.cursor.execute(
-            "SELECT job_title, company, source_type FROM application_tracking WHERE id = %s",
-            (app_id,)
-        )
-        row = self.db.cursor.fetchone()
-        if not row:
-            print("\n❌ Application not found.")
-            return
-
-        current_title, current_company, source_type = row
-        print(f"\nCurrent job title: {current_title or '(none)'}")
-        print(f"Current hiring company: {current_company or '(none)'}")
-        print("Press Enter to keep a field as-is, or type a new value.")
-
-        job_title = Input.get_string("Job title: ")
-        hiring_company = Input.get_string("Hiring company: ")
-
-        if job_title is None and hiring_company is None:
-            Display.exit_to_menu()
-            return
-
-        if not job_title and not hiring_company:
-            print("\n⏭️ No changes made.")
-            return
-
-        self.db.update_job_info(app_id, job_title, hiring_company)
-        print("\n✅ Job info updated.")
-
-        if source_type == 'recruiter' and job_title and not current_title:
-            print(
-                "💡 This recruiter contact now has a role attached — it'll flow through the normal application workflow (interviews, statuses, tasks).")
-
 
     def _handle_recruiter_outreach(self):
         """Handle adding a recruiter contact."""
@@ -1375,7 +1430,6 @@ class MenuHandler:
 
         print("\n✅ Recruiter contact added!")
         print("💡 Tip: You can add or edit the job later via the UPDATE menu.")
-
 
     def handle_update(self):
         """Handle UPDATE menu option."""
@@ -1426,7 +1480,6 @@ class MenuHandler:
 
         self._handle_update_menu(app_id)
 
-
     def _handle_update_menu(self, app_id: int):
         """Handle the update submenu."""
         print("\nWhat do you want to update?")
@@ -1437,8 +1490,9 @@ class MenuHandler:
         print("5. Update priority")
         print("6. Delete Entry")
         print("7. Job/role info (title & hiring company)")
+        print("8. Schedule a recruiter call")
 
-        choice = Input.get_number("\nField to update (1-7, or X to exit): ", 1, 7)
+        choice = Input.get_number("\nField to update (1-8, or X to exit): ", 1, 8)
         if choice is None:
             Display.exit_to_menu()
             return
@@ -1457,7 +1511,8 @@ class MenuHandler:
             self._delete_application(app_id)
         elif choice == 7:
             self._update_job_info(app_id)
-
+        elif choice == 8:
+            self._schedule_recruiter_call(app_id)
 
     def _update_status(self, app_id: int):
         """Update application status."""
@@ -1466,7 +1521,6 @@ class MenuHandler:
             print(f"\n✅ Status updated to: {Display.format_status(new_status)}")
         else:
             print("\n⏭️ Status update cancelled.")
-
 
     def _update_contact(self, app_id: int):
         """Update contact information."""
@@ -1478,7 +1532,6 @@ class MenuHandler:
             return
         self.db.update_contact_info(app_id, contact_name, contact_details)
         print("\n✅ Follow-up contact updated.")
-
 
     def _update_interview(self, app_id: int):
         """Update interview details."""
@@ -1497,6 +1550,40 @@ class MenuHandler:
         if new_status:
             print(f"✅ Status updated to: {Display.format_status(new_status)}")
 
+    def _update_job_info(self, app_id: int):
+        """Update job title and/or hiring company (e.g., recruiter pitched a role)."""
+        # Show current values so you know what you're changing
+        self.db.cursor.execute(
+            "SELECT job_title, company, source_type FROM application_tracking WHERE id = %s",
+            (app_id,)
+        )
+        row = self.db.cursor.fetchone()
+        if not row:
+            print("\n❌ Application not found.")
+            return
+
+        current_title, current_company, source_type = row
+        print(f"\nCurrent job title: {current_title or '(none)'}")
+        print(f"Current hiring company: {current_company or '(none)'}")
+        print("Press Enter to keep a field as-is, or type a new value.")
+
+        job_title = Input.get_string("Job title: ")
+        hiring_company = Input.get_string("Hiring company: ")
+
+        if job_title is None and hiring_company is None:
+            Display.exit_to_menu()
+            return
+
+        if not job_title and not hiring_company:
+            print("\n⏭️ No changes made.")
+            return
+
+        self.db.update_job_info(app_id, job_title, hiring_company)
+        print("\n✅ Job info updated.")
+
+        if source_type == 'recruiter' and job_title and not current_title:
+            print("💡 This recruiter contact now has a role attached — it'll flow through "
+                  "the normal application workflow (interviews, statuses, tasks).")
 
     def _update_notes(self, app_id: int):
         """Update notes."""
@@ -1517,7 +1604,6 @@ class MenuHandler:
         self.db.update_notes(app_id, new_notes, append=True)
         print("\n✅ Notes updated.")
 
-
     def _update_priority(self, app_id: int):
         """Update priority status."""
         response = Input.get_yes_no_exit("Mark as priority? (Y/N/X): ")
@@ -1532,7 +1618,6 @@ class MenuHandler:
             print("\n✅ Application marked as priority.")
         else:
             print("\n✅ Priority removed from application.")
-
 
     def _delete_application(self, app_id: int):
         """Delete an application."""
@@ -1570,7 +1655,6 @@ class MenuHandler:
             else:
                 print("\n❌ Please type 'DELETE' exactly to confirm, or 'X'/'N' to cancel")
 
-
     @staticmethod
     def handle_tips():
         """Display job search tips."""
@@ -1581,7 +1665,6 @@ class MenuHandler:
             "✏️ TAKE NOTES! You should already know why you want to work for the company and about their mission BEFORE speaking with someone from the company.")
         print("🔑 Confidence is Key! You know you deserve this job and focus on YOU, not anyone else!")
         print("💻 Keep applying, keep trying. It will not be this way forever.")
-
 
 
 # MAIN APPLICATION #
