@@ -12,36 +12,40 @@
 
 ## Prerequsites
 ```bash
-# Make new directory for application
-mkdir refactor-update
-
-# Open that directory
-cd refactor update
-
 # Clone the repository
 git clone https://github.com/briannalytical/refactor-update.git
 
-# Install dependencies
-pip install -r requirements.txt
+# Open that directory
+cd refactor-update
 
-# Install Python interpreter (if needed)
-pip install python3
-
-# Set up Python environment & imports
+# Set up Python environment
 python3 -m venv .venv
 source .venv/bin/activate
-pip install psycopg2-binary
 
+# Install dependencies
+pip install -r requirements.txt
 ```
 
 ## Configuration
-This app was developed using postgreSQL and it is highly encouraged that you use postgreSQL-friendly software. pgAdmin is recommended.
-1. Download pgAdmin4
-  ~ https://www.pgadmin.org/
-  ~ Click "Servers" > Register and name refactor-update
-  ~ Under "Connections" verify default settings: localhost (5432) and "postgres" for maintenance database
-2. Open refactor-update server and there will be a pop-up confirming connection to server
-3. Note: as this is a machine-locked program, if the server is not running, the program will not run and you will be prompted to restart the server in order to proceed
+This app connects to a PostgreSQL database using a 'DATABASE_URL' environment variable inside the '.env' file in the root directory.
+
+The required string format is:
+```text
+postgresql://[USERNAME]:[PASSWORD]@[HOST]:[PORT]/[DATABASE_NAME]
+```
+If there is a valid server connection but no database exists with the passed `DATABASE_NAME` value the string this will attempt to create a database for you with that name.
+
+Create a local `.env` file in the project root directory (copy `.env.example`) and fill in your specific `DATABASE_URL`. 
+
+**Example (Local pgAdmin):**
+```text
+DATABASE_URL=postgresql://postgres:secretpassword@localhost:5432/refactor_db
+```
+
+**Example (Cloud Neon Console):**
+```text
+DATABASE_URL=postgresql://neondb_owner:pass123@ep-cool-pool-123.us-east-2.aws.neon.tech/neon_db?sslmode=require&channel_binding=require
+```
 
 ## Use
 This app is best run in a terminal or can be run in an IDE. If using IDE, verify that Python3 interpreter has been installed. PyCharm is recommended and the community edition is free.

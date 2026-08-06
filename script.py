@@ -1,8 +1,12 @@
 import sys
+from urllib.parse import urlunparse, urlparse
+
 import psycopg2
 from datetime import date, datetime
 from typing import Optional, Tuple, List, Dict, Any
 import os
+
+from psycopg2 import sql
 from psycopg2.extensions import cursor as PgCursor, connection as PgConnection
 from dotenv import load_dotenv
 
@@ -228,13 +232,6 @@ def initialize_database(cursor, conn):
     conn.commit()
     print("✅ Database schema initialized successfully!")
 
-
-# CONFIGURATION & CONSTANTS #
-# ========================= #
-DB_CONFIG = {
-    'dsn': os.getenv("DATABASE_URL")
-}
-
 AUTO_STATUS_MAP = {
     'check_application_status': 'interviewing_first_scheduled',
     'follow_up_with_contact': 'interviewing_first_scheduled',
@@ -383,28 +380,90 @@ class DatabaseConnection:
         self.conn: Optional[PgConnection] = None
         self.cursor: Optional[PgCursor] = None
 
-    def __enter__(self) -> Tuple[PgConnection, PgCursor]:
+    def _ensure_database_exists(self, url: str) -> None:
+        parsed = urlparse(url)
+        target_db = parsed.path.lstrip('/')
+
+        if not target_db:
+            return
+
+        postgres_path = parsed._replace(path='/postgres')
+        system_url = urlunparse(postgres_path)
+
+        system_conn = None
         try:
-            self.conn = psycopg2.connect(**self.config)
+            system_conn = psycopg2.connect(system_url)
+            system_conn.set_session(autocommit=True)
+
+            with system_conn.cursor() as sys_cursor:
+                sys_cursor.execute("SELECT 1 FROM pg_database WHERE datname = %s;", (target_db,))
+
+                if not sys_cursor.fetchone():
+                    query = sql.SQL("CREATE DATABASE {}").format(sql.Identifier(target_db))
+                    try:
+                        sys_cursor.execute(query)
+                    except psycopg2.errors.DuplicateDatabase:
+                        pass
+
+        except psycopg2.Error as e:
+            print(f"Failed while checking/creating system database: {e}")
+            sys.exit(1)
+        finally:
+            if system_conn:
+                system_conn.close()
+
+    def __enter__(self) -> Tuple[PgConnection, PgCursor]:
+        dsn_string = self.config.get('dsn')
+        if not dsn_string:
+            print("'dsn' key is missing or empty.")
+            sys.exit(1)
+
+        self._ensure_database_exists(dsn_string)
+
+        try:
+            self.conn = psycopg2.connect(dsn_string)
             self.cursor = self.conn.cursor()
 
             if self.initialize:
                 initialize_database(self.cursor, self.conn)
 
             return self.conn, self.cursor
+
         except psycopg2.Error as e:
             print(f"\n❌ Database connection failed: {e}")
+            self._cleanup()
             sys.exit(1)
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+        except Exception:
+            self._cleanup()
+            raise
+
+    def _cleanup(self) -> None:
+        """Release conn/cursor"""
         if self.cursor:
-            self.cursor.close()
+            try:
+                self.cursor.close()
+            except psycopg2.Error:
+                pass
         if self.conn:
-            if exc_type is None:
-                self.conn.commit()
-            else:
-                self.conn.rollback()
-            self.conn.close()
+            try:
+                self.conn.close()
+            except psycopg2.Error:
+                pass
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        try:
+            if self.cursor:
+                self.cursor.close()
+        finally:
+            if self.conn:
+                try:
+                    if exc_type is None:
+                        self.conn.commit()
+                    else:
+                        self.conn.rollback()
+                finally:
+                    self.conn.close()
 
 
 # DISPLAY UTILITIES #
