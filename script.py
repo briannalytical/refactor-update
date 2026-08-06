@@ -61,6 +61,15 @@ def initialize_database(cursor, conn):
                 WHEN duplicate_object THEN null;
             END $$;
         """)
+    # Add 'send_resume' to the enum for databases created before it existed.
+    # Isolated in its own transaction — ALTER TYPE ADD VALUE has quirks, and a
+    # failure here must not abort the rest of schema setup.
+    conn.commit()
+    try:
+        cursor.execute("ALTER TYPE next_action_enum ADD VALUE IF NOT EXISTS 'send_resume';")
+        conn.commit()
+    except psycopg2.Error:
+        conn.rollback()
 
     # Create the main table if it doesn't exist
     cursor.execute("""
