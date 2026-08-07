@@ -1,14 +1,12 @@
 import sys
+import os
 import psycopg2
 from datetime import date, datetime
 from typing import Optional, Tuple, List, Dict, Any
-import os
 from psycopg2.extensions import cursor as PgCursor, connection as PgConnection
 from dotenv import load_dotenv
 
 load_dotenv()
-
-DB_CONFIG = {'dsn': os.getenv("DATABASE_URL")}
 
 
 ### DATABASE SCHEMA INITIALIZATION ###
@@ -40,23 +38,24 @@ def initialize_database(cursor, conn):
     """)
 
     cursor.execute("""
-            DO $$ BEGIN
-                CREATE TYPE next_action_enum AS ENUM (
-                    'check_application_status',
-                    'follow_up_with_contact',
-                    'send_resume',
-                    'send_follow_up_email',
-                    'prepare_for_interview',
-                    'send_thank_you_email',
-                    'prepare_for_second_interview',
-                    'send_thank_you_email_second_interview',
-                    'prepare_for_final_interview',
-                    'send_thank_you_email_final_interview'
-                );
-            EXCEPTION
-                WHEN duplicate_object THEN null;
-            END $$;
-        """)
+        DO $$ BEGIN
+            CREATE TYPE next_action_enum AS ENUM (
+                'check_application_status',
+                'follow_up_with_contact',
+                'send_resume',
+                'send_follow_up_email',
+                'prepare_for_interview',
+                'send_thank_you_email',
+                'prepare_for_second_interview',
+                'send_thank_you_email_second_interview',
+                'prepare_for_final_interview',
+                'send_thank_you_email_final_interview'
+            );
+        EXCEPTION
+            WHEN duplicate_object THEN null;
+        END $$;
+    """)
+
     # Add 'send_resume' to the enum for databases created before it existed.
     # Isolated in its own transaction — ALTER TYPE ADD VALUE has quirks, and a
     # failure here must not abort the rest of schema setup.
@@ -137,6 +136,27 @@ def initialize_database(cursor, conn):
             ALTER COLUMN company DROP NOT NULL;
     """)
 
+    # Correspondence log: one application has many logged messages.
+    # ON DELETE CASCADE means deleting an application cleans up its log too.
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS correspondence (
+            id SERIAL PRIMARY KEY,
+            application_id INTEGER NOT NULL
+                REFERENCES application_tracking(id) ON DELETE CASCADE,
+            contact_date DATE NOT NULL DEFAULT CURRENT_DATE,
+            direction VARCHAR(10) NOT NULL,
+            channel VARCHAR(30),
+            summary TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+    """)
+
+    # Index so "most recent message for this application" stays fast
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_correspondence_app_date
+            ON correspondence (application_id, contact_date DESC);
+    """)
+
     # Helper function: add N business days to a date (skips Sat/Sun)
     cursor.execute("""
         CREATE OR REPLACE FUNCTION add_business_days(start_date DATE, num_days INTEGER)
@@ -178,22 +198,6 @@ def initialize_database(cursor, conn):
         END;
         $$ LANGUAGE plpgsql;
     """)
-
-    def mark_resume_sent(self, app_id: int) -> bool:
-        """Mark the resume as sent and clear any pending send-resume task."""
-        self.cursor.execute(
-            """UPDATE application_tracking
-               SET resume_sent = TRUE,
-                   resume_sent_date = CURRENT_DATE,
-                   next_action = CASE WHEN next_action = 'send_resume'
-                                      THEN NULL ELSE next_action END,
-                   next_follow_up_date = CASE WHEN next_action = 'send_resume'
-                                              THEN NULL ELSE next_follow_up_date END
-               WHERE id = %s""",
-            (app_id,)
-        )
-        self.conn.commit()
-        return self.cursor.rowcount > 0
 
     # Create trigger if it doesn't exist
     cursor.execute("""
@@ -314,6 +318,10 @@ LINKEDIN_TEMPLATES = {
         "and wanted to reach out directly. I'd love to connect and hear more about "
         "the team if you have a moment."
     ),
+    'send_resume': (
+        "Hi {contact_name}, great connecting — sending my resume over now. "
+        "I'd love to hear about any roles you think could be a fit, now or down the line."
+    ),
     'send_follow_up_email': (
         "Hi {contact_name}, following up on my application for the {job_title} role "
         "at {company}. I'm still very interested and would love to connect."
@@ -358,6 +366,16 @@ EMAIL_TEMPLATES = {
             "introduce myself directly.\n\n"
             "I'd welcome the chance to learn more about the team and share why I think "
             "I'd be a strong fit. Thank you for your time.\n\n"
+            "Best,"
+        ),
+    },
+    'send_resume': {
+        'subject': "Resume — as discussed",
+        'body': (
+            "Hi {contact_name},\n\n"
+            "Thanks for reaching out. I've attached my resume as requested.\n\n"
+            "I'd be glad to hear more about the roles you're working on — happy to talk "
+            "through my background and what I'm looking for whenever convenient.\n\n"
             "Best,"
         ),
     },
@@ -839,6 +857,46 @@ class ApplicationDB:
         )
         self.conn.commit()
 
+    def log_correspondence(self, app_id: int, contact_date: str, direction: str,
+                           channel: Optional[str], summary: Optional[str]):
+        """Record a message sent to or received from a contact."""
+        self.cursor.execute(
+            """INSERT INTO correspondence
+               (application_id, contact_date, direction, channel, summary)
+               VALUES (%s, %s, %s, %s, %s)""",
+            (app_id, contact_date, direction, channel, summary)
+        )
+        self.conn.commit()
+
+    def get_correspondence(self, app_id: int) -> List[Tuple]:
+        """Get the full message history for an application, newest first."""
+        self.cursor.execute(
+            """SELECT id, contact_date, direction, channel, summary
+               FROM correspondence
+               WHERE application_id = %s
+               ORDER BY contact_date DESC, id DESC""",
+            (app_id,)
+        )
+        return self.cursor.fetchall()
+
+    def get_last_correspondence(self, app_id: int) -> Optional[Tuple]:
+        """Get the most recent message for an application, or None."""
+        self.cursor.execute(
+            """SELECT contact_date, direction, channel, summary
+               FROM correspondence
+               WHERE application_id = %s
+               ORDER BY contact_date DESC, id DESC
+               LIMIT 1""",
+            (app_id,)
+        )
+        return self.cursor.fetchone()
+
+    def delete_correspondence(self, corr_id: int) -> bool:
+        """Delete a single logged message."""
+        self.cursor.execute("DELETE FROM correspondence WHERE id = %s", (corr_id,))
+        self.conn.commit()
+        return self.cursor.rowcount > 0
+
 
 # BUSINESS LOGIC #
 # ============== #
@@ -1040,6 +1098,14 @@ def _display_backlog_task(task: Tuple, today: date):
 class MenuHandler:
     """Handles all menu operations."""
 
+    CHANNELS = {
+        1: 'Email',
+        2: 'LinkedIn',
+        3: 'Phone',
+        4: 'Text',
+        5: 'Other',
+    }
+
     def __init__(self, db: ApplicationDB):
         self.db = db
         self.task_processor = TaskProcessor(db)
@@ -1093,7 +1159,6 @@ class MenuHandler:
             else:
                 self._handle_update_menu(app_id)
 
-
     def _display_application_details(self, app_id: int):
         """Display detailed information for a single application."""
         # Get full application details with column names
@@ -1135,6 +1200,9 @@ class MenuHandler:
 
         print("-" * 60)
 
+        # Show any logged correspondence alongside the details
+        self._show_correspondence(app_id)
+
         # Prompt to update
         response = Input.get_yes_no_exit("\nWould you like to update this application? (Y/N/X): ")
         if response == 'X':
@@ -1142,7 +1210,6 @@ class MenuHandler:
             return
         elif response == 'Y':
             self._handle_update_menu(app_id)
-
 
     def handle_tasks(self):
         """Handle TASKS menu option."""
@@ -1169,7 +1236,6 @@ class MenuHandler:
         # Process today's tasks
         self._process_daily_tasks(today)
 
-
     def _process_backlog(self, backlog_tasks: List[Tuple], today: date):
         """Process backlog tasks."""
         print(f"\n📋 Backlog - Overdue Tasks")
@@ -1195,7 +1261,6 @@ class MenuHandler:
             else:
                 Display.invalid_number()
 
-
     def _process_daily_tasks(self, today: date):
         """Process today's tasks."""
         daily_tasks = self.db.get_daily_tasks(today)
@@ -1220,7 +1285,6 @@ class MenuHandler:
             for job_title, company, task_name in incomplete_tasks:
                 print(f"📌 {job_title} @ {company} - {task_name}")
             print("-" * 60)
-
 
     def _process_daily_task(self, task: Tuple, today: date, incomplete_tasks: List) -> bool:
         """Process a single daily task. Returns False if user exits."""
@@ -1296,7 +1360,6 @@ class MenuHandler:
 
         return True
 
-
     def handle_contacts(self):
         """Display all contacts (recruiters and application POCs)."""
         # Get all contacts from applications and recruiters
@@ -1343,7 +1406,6 @@ class MenuHandler:
 
         print(f"\nTotal contacts: {len(contacts)}")
 
-
     def _process_dormant_recruiters(self, today: date):
         """Surface recruiter contacts that have gone quiet for 14+ days."""
         dormant = self.db.get_dormant_recruiters(today)
@@ -1374,7 +1436,6 @@ class MenuHandler:
                 print("\n✅ Noted! I'll nudge you again if things go quiet for another 14 days.\n")
             else:
                 print("\n⏭️ Skipped.\n")
-
 
     def _schedule_recruiter_call(self, app_id: int):
         """Schedule a call with a recruiter."""
@@ -1439,6 +1500,74 @@ class MenuHandler:
         else:
             print("\n❌ Could not update that entry.")
 
+    def _handle_correspondence(self, app_id: int):
+        """Show the message history for an entry, and offer to log a new one."""
+        self._show_correspondence(app_id)
+
+        response = Input.get_yes_no_exit("\n✍️  Log a new message? (Y/N/X): ")
+        if response != 'Y':
+            return
+
+        self._log_new_correspondence(app_id)
+
+    def _show_correspondence(self, app_id: int):
+        """Print the full message history for an entry."""
+        history = self.db.get_correspondence(app_id)
+
+        if not history:
+            print("\n📭 No correspondence logged for this entry yet.")
+            return
+
+        print(f"\n📬 Correspondence History ({len(history)} message(s))")
+        print("=" * 60)
+
+        for corr_id, contact_date, direction, channel, summary in history:
+            arrow = "→ Sent" if direction == 'outbound' else "← Received"
+            date_str = contact_date.strftime('%B %d, %Y')
+            channel_str = f" ({channel})" if channel else ""
+            print(f"{arrow}{channel_str} — {date_str}  [#{corr_id}]")
+            if summary:
+                print(f"   {summary}")
+            print("-" * 60)
+
+    def _log_new_correspondence(self, app_id: int):
+        """Prompt for and save a new correspondence entry."""
+        direction_choice = Input.get_choice(
+            "\nDid you (S)end or (R)eceive this message? (S/R, or X to cancel): ",
+            ['S', 'R']
+        )
+        if direction_choice is None:
+            print("\n⏭️ Cancelled.")
+            return
+        direction = 'outbound' if direction_choice == 'S' else 'inbound'
+
+        print("\nHow?")
+        for num, label in self.CHANNELS.items():
+            print(f"{num}. {label}")
+        channel_num = Input.get_number("Select (1-5, or X to skip): ", 1, 5)
+        channel = self.CHANNELS.get(channel_num) if channel_num else None
+
+        contact_date = input("\nDate (YYYY-MM-DD) or press Enter for today: ").strip()
+        if contact_date.upper() == 'X':
+            print("\n⏭️ Cancelled.")
+            return
+        if not contact_date:
+            contact_date = date.today().strftime('%Y-%m-%d')
+        else:
+            try:
+                datetime.strptime(contact_date, '%Y-%m-%d')
+            except ValueError:
+                print("\n❌ Invalid date format. Please use YYYY-MM-DD (e.g., 2026-08-07)")
+                return
+
+        summary = Input.get_string("What was it about? (optional): ")
+
+        self.db.log_correspondence(app_id, contact_date, direction, channel, summary)
+
+        if direction == 'outbound':
+            print("\n✅ Logged. I'll track how long you've been waiting on a reply.")
+        else:
+            print("\n✅ Logged.")
 
     def handle_enter(self):
         """Handle ENTER menu option - add new application or recruiter contact."""
@@ -1536,7 +1665,6 @@ class MenuHandler:
             print("📄 I've added 'Send Resume' to today's tasks — check TASKS when you're ready.")
         print("💡 Tip: You can add or edit the job later via the UPDATE menu.")
 
-
     def handle_update(self):
         """Handle UPDATE menu option."""
         self.db.cursor.execute(
@@ -1586,7 +1714,6 @@ class MenuHandler:
 
         self._handle_update_menu(app_id)
 
-
     def _handle_update_menu(self, app_id: int):
         """Handle the update submenu."""
         print("\nWhat do you want to update?")
@@ -1599,8 +1726,9 @@ class MenuHandler:
         print("7. Job/role info (title & hiring company)")
         print("8. Schedule a recruiter call")
         print("9. Confirm resume sent")
+        print("10. Correspondence log (view / add)")
 
-        choice = Input.get_number("\nField to update (1-9, or X to exit): ", 1, 9)
+        choice = Input.get_number("\nField to update (1-10, or X to exit): ", 1, 10)
         if choice is None:
             Display.exit_to_menu()
             return
@@ -1623,7 +1751,8 @@ class MenuHandler:
             self._schedule_recruiter_call(app_id)
         elif choice == 9:
             self._mark_resume_sent(app_id)
-
+        elif choice == 10:
+            self._handle_correspondence(app_id)
 
     def _update_status(self, app_id: int):
         """Update application status."""
@@ -1632,7 +1761,6 @@ class MenuHandler:
             print(f"\n✅ Status updated to: {Display.format_status(new_status)}")
         else:
             print("\n⏭️ Status update cancelled.")
-
 
     def _update_contact(self, app_id: int):
         """Update contact information."""
@@ -1644,7 +1772,6 @@ class MenuHandler:
             return
         self.db.update_contact_info(app_id, contact_name, contact_details)
         print("\n✅ Follow-up contact updated.")
-
 
     def _update_interview(self, app_id: int):
         """Update interview details."""
@@ -1662,7 +1789,6 @@ class MenuHandler:
         print("\n✅ Interview details updated.")
         if new_status:
             print(f"✅ Status updated to: {Display.format_status(new_status)}")
-
 
     def _update_job_info(self, app_id: int):
         """Update job title and/or hiring company (e.g., recruiter pitched a role)."""
@@ -1699,7 +1825,6 @@ class MenuHandler:
             print("💡 This recruiter contact now has a role attached — it'll flow through "
                   "the normal application workflow (interviews, statuses, tasks).")
 
-
     def _update_notes(self, app_id: int):
         """Update notes."""
         self.db.cursor.execute("SELECT job_notes FROM application_tracking WHERE id = %s", (app_id,))
@@ -1719,7 +1844,6 @@ class MenuHandler:
         self.db.update_notes(app_id, new_notes, append=True)
         print("\n✅ Notes updated.")
 
-
     def _update_priority(self, app_id: int):
         """Update priority status."""
         response = Input.get_yes_no_exit("Mark as priority? (Y/N/X): ")
@@ -1734,7 +1858,6 @@ class MenuHandler:
             print("\n✅ Application marked as priority.")
         else:
             print("\n✅ Priority removed from application.")
-
 
     def _delete_application(self, app_id: int):
         """Delete an application."""
@@ -1771,7 +1894,6 @@ class MenuHandler:
                 break
             else:
                 print("\n❌ Please type 'DELETE' exactly to confirm, or 'X'/'N' to cancel")
-
 
     @staticmethod
     def handle_tips():
