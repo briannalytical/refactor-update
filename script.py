@@ -1902,11 +1902,11 @@ class MenuHandler:
         print(
             "TIP 1\n",
             "💃 Don't check every box? Don't have enough years of experience. APPLY ANYWAY!\n",
-            "...are essentially \"Should we could have the perfect candidate, it would be all of this.\"\n"
-            "What that translates to is \"How can we get an entire IT department and pay them for one job.\n"
+            "Job postings are essentially \"Should we could have the perfect candidate, it would be all of this.\"\n",
+            "What that translates to is \"How can we get an entire IT department and pay them for one job.\n",
             "Companies are always trying to get something for less.\n",
             "It's not you. You're not going to check every box, and that shouldn't bother you.\n\n",
-            "📋APPLY ANYWAY!!📋\n\n"
+            "📋APPLY ANYWAY!!📋\n"
             
             "TIP 2\n",
             "It is okay to stalk LinkedIn for the hiring manager.\n",
@@ -1918,7 +1918,7 @@ class MenuHandler:
 
             "TIP 3\n",
             "📩 FOLLOW UP! You are 78% more likely to land an interview if you reach out to a recruiter or hiring manager after you apply.\n",
-            "Whether it's following up with a recruiting agency or a hiring manager, ALWAYS find a contact at the company.\n",
+            "Whether it's following up with a recruiting agency or a hiring manager, ALWAYS find a contact at the company.\n\n",
 
             "TIP 4\n",
             "If a recruiter reaches out to you about a specific job, and the company ends up rejecting you, maintain a connection to that recruiter.\n",
