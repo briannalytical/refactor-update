@@ -1955,7 +1955,9 @@ def main():
             Display.main_menu()
             selection = input("\nAction: ").strip().upper()
 
-            if selection == "VIEW":
+            if selection == "TIPS":
+                menu.handle_tips()
+            elif selection == "VIEW":
                 menu.handle_view()
             elif selection == "TASKS":
                 menu.handle_tasks()
@@ -1965,8 +1967,6 @@ def main():
                 menu.handle_contacts()
             elif selection == "UPDATE":
                 menu.handle_update()
-            elif selection == "TIPS":
-                menu.handle_tips()
             elif selection == "BYE":
                 print("\n👋 Goodbye! Check back again soon!")
                 break
