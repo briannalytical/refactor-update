@@ -457,12 +457,12 @@ class Display:
     @staticmethod
     def main_menu():
         print("\nWhat would you like to do? Enter your choice below:")
-        print("\nVIEW: View all applications")
+        print("\nTIPS: Some helpful tips to keep you staying positive as you apply")
         print("TASKS: View today's tasks")
         print("CONTACTS: View your contact book")
         print("ENTER: Track a new job application")
         print("UPDATE: Update an existing application")
-        print("TIPS: Some helpful tips to keep in mind as you apply")
+        print("VIEW: View all applications")
         print("BYE: End your session")
 
     @staticmethod
