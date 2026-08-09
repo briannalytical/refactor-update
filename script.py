@@ -1903,10 +1903,10 @@ class MenuHandler:
             "TIP 1\n",
             "💃 Don't check every box? Don't have enough years of experience. APPLY ANYWAY!\n",
             "Job postings are essentially \"Should we could have the perfect candidate, it would be all of this.\"\n",
-            "What that translates to is \"How can we get an entire IT department and pay them for one job.\n",
+            "What that translates to is \"How can we get an entire IT department and pay them for one job.\"\n",
             "Companies are always trying to get something for less.\n",
-            "It's not you. You're not going to check every box, and that shouldn't bother you.\n\n",
-            "📋APPLY ANYWAY!!📋\n"
+            "It's not you. You're not going to check every box, and that shouldn't bother you.\n",
+            "📋APPLY ANYWAY!!📋\n\n"
             
             "TIP 2\n",
             "It is okay to stalk LinkedIn for the hiring manager.\n",
