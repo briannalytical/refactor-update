@@ -1898,13 +1898,42 @@ class MenuHandler:
     @staticmethod
     def handle_tips():
         """Display job search tips."""
-        print("\n💡 Job Search Tips:")
+        print("\n💡 Job Search Tips:\n")
         print(
-            "📩 FOLLOW UP! You are 78% more likely to land an interview if you reach out to a recruiter or hiring manager after you apply.")
-        print(
-            "✏️ TAKE NOTES! You should already know why you want to work for the company and about their mission BEFORE speaking with someone from the company.")
-        print("🔑 Confidence is Key! You know you deserve this job and focus on YOU, not anyone else!")
-        print("💻 Keep applying, keep trying. It will not be this way forever.")
+            "TIP 1\n",
+            "💃 Don't check every box? Don't have enough years of experience. APPLY ANYWAY!\n",
+            "...are essentially \"Should we could have the perfect candidate, it would be all of this.\"\n"
+            "What that translates to is \"How can we get an entire IT department and pay them for one job.\n"
+            "Companies are always trying to get something for less.\n",
+            "It's not you. You're not going to check every box, and that shouldn't bother you.\n\n",
+            "📋APPLY ANYWAY!!📋\n\n"
+            
+            "TIP 2\n",
+            "It is okay to stalk LinkedIn for the hiring manager.\n",
+            "I'm completely serious. Who else do you think they're expecting to hear from?\n",
+            "Doing the work to track them down and follow up about a job application reflects your seriousness about working for the company.\n",
+            "This may be the person standing between you and a callback.\n",
+            "Send them a connection request on LinkedIn and inform them you're following up on your application.\n",
+            "The worst thing that can happen is they don't respond, and you will not die if they don't.\n\n",
+
+            "TIP 3\n",
+            "📩 FOLLOW UP! You are 78% more likely to land an interview if you reach out to a recruiter or hiring manager after you apply.\n",
+            "Whether it's following up with a recruiting agency or a hiring manager, ALWAYS find a contact at the company.\n",
+
+            "TIP 4\n",
+            "If a recruiter reaches out to you about a specific job, and the company ends up rejecting you, maintain a connection to that recruiter.\n",
+            "If you've had a call, and they've gotten to know you, they're likely to remember you and come back to you with another job in the future.\n",
+            "You should initiate contact too. Shoot them a message/email to check in, and inquire if any new opportunities have crossed their desk lately.\n\n",
+
+            "TIP 5\n",
+            "CONNECTIONS MATTER!!\n",
+            "Put yourself out there: go to local tech happy hours, job fairs, etc. Make meaningful connections with people.\n",
+            "People who know you personally and can speak to your character are likely to recommend you for positions.\n\n",
+
+            "The job search isn't on everyone's top 10 favorite things list. But it doesn't have to be grueling, boring, or discouraging.\n",
+            "Oddly enough, it can be confidence building. The more interviews you have, you'll do better and better, and you'll believe the words you're saying.\n",
+            "A rejection doesn't speak to who you are as a person or the skills to offer. It's just not the right fit.\n",
+            "Keep being you, put on your best self, and you will manifest anything you want.\n")
 
 
 # MAIN APPLICATION #
