@@ -158,6 +158,7 @@ def initialize_database(cursor, conn):
     """)
 
     # Helper function: add N business days to a date (skips Sat/Sun)
+    # DOW is a keyword for "day of week" (Sun 0; Sat 6)
     cursor.execute("""
         CREATE OR REPLACE FUNCTION add_business_days(start_date DATE, num_days INTEGER)
         RETURNS DATE AS $$
@@ -171,7 +172,6 @@ def initialize_database(cursor, conn):
             END IF;
             WHILE days_added < num_days LOOP
                 result_date := result_date + 1;
-                -- DOW: 0 = Sunday, 6 = Saturday
                 IF EXTRACT(DOW FROM result_date) NOT IN (0, 6) THEN
                     days_added := days_added + 1;
                 END IF;
